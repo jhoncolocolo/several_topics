@@ -1,133 +1,81 @@
 
-Código Mejorado con Winston
-Primero, instala Winston:
-
-bash
-Copiar
-Editar
-npm install winston
-Luego, actualiza tu código para usar Winston como sistema de logging:
-
 ```javascript
+Aquí tienes una versión del Logger en TypeScript que incluye el tiempo de creación de cada mensaje (moment_of_call) y un mensaje personalizado (custom_message) como parte del log:
+
+typescript
 Copiar
 Editar
-import { APIGatewayEvent, APIGatewayProxyResult } from "aws-lambda";
-import winston from "winston";
+export class Logger {
+  private levels: string[];
+  private currentLevel: number;
 
-// Configuración del logger con Winston
-const logger = winston.createLogger({
-  level: "info",
-  format: winston.format.json(),
-  transports: [
-    new winston.transports.Console(), // Enviar los logs a la consola
-    // Puedes agregar más transports, como enviar logs a CloudWatch o un archivo
-  ],
-});
-
-export const handler = async (event: APIGatewayEvent): Promise<APIGatewayProxyResult> => {
-  const startTime = new Date().toISOString();
-  
-  // Log inicial
-  logger.info({
-    timestamp: startTime,
-    message: "Request received",
-    requestId: event.requestContext?.requestId || "N/A",
-    resource: event.resource,
-    path: event.path,
-    httpMethod: event.httpMethod,
-    headers: event.headers,
-  });
-
-  let body;
-  try {
-    // Decodificar y parsear el body
-    if (event.body) {
-      const decodedBody = event.isBase64Encoded
-        ? Buffer.from(event.body, "base64").toString("utf8")
-        : event.body;
-      body = JSON.parse(decodedBody);
-    } else {
-      throw new Error("No body in request");
+  constructor(level: string = 'info') {
+    this.levels = ['error', 'warn', 'info', 'debug'];
+    const levelIndex = this.levels.indexOf(level);
+    if (levelIndex === -1) {
+      throw new Error(`Invalid log level: ${level}`);
     }
-
-    // Aplicar tratamiento al campo 'seed'
-    const treatedBody = {
-      ...body,
-      seed: "**CONFIDENTIAL**", // Enmascarar el valor de 'seed'
-    };
-
-    logger.info({
-      timestamp: new Date().toISOString(),
-      message: "Request body processed",
-      treatedBody,
-    });
-
-    // Generar la respuesta
-    const response = {
-      statusCode: 200,
-      body: JSON.stringify({
-        message: "Payload processed successfully",
-        data: treatedBody,
-      }),
-    };
-
-    // Log de respuesta
-    logger.info({
-      timestamp: new Date().toISOString(),
-      message: "Response sent",
-      response,
-    });
-
-    return response;
-  } catch (error) {
-    logger.error({
-      timestamp: new Date().toISOString(),
-      message: "Error processing request",
-      error: error.message,
-    });
-
-    return {
-      statusCode: 400,
-      body: JSON.stringify({
-        message: "Invalid request payload",
-        error: error.message,
-      }),
-    };
+    this.currentLevel = levelIndex;
   }
-};
+
+  private log(level: string, message: string, customMessage: string = ''): void {
+    const levelIndex = this.levels.indexOf(level);
+    if (levelIndex <= this.currentLevel) {
+      const momentOfCall = new Date().toISOString();
+      const logObject = {
+        time: momentOfCall,
+        message: message,
+        custom_message: customMessage,
+      };
+      console.log(`[${level.toUpperCase()}]`, JSON.stringify(logObject));
+    }
+  }
+
+  public error(message: string, customMessage: string = ''): void {
+    this.log('error', message, customMessage);
+  }
+
+  public warn(message: string, customMessage: string = ''): void {
+    this.log('warn', message, customMessage);
+  }
+
+  public info(message: string, customMessage: string = ''): void {
+    this.log('info', message, customMessage);
+  }
+
+  public debug(message: string, customMessage: string = ''): void {
+    this.log('debug', message, customMessage);
+  }
+}
+
+// Usage
+const logger = new Logger('info');
+
+logger.error('This is an error message', 'Additional context for the error'); 
+logger.warn('This is a warning', 'Custom warning info');        
+logger.info('Info message', 'More details about the info message');             
+logger.debug('Debug message', 'Debugging context'); 
+Cambios realizados:
+Nuevo parámetro customMessage:
+
+Se agregó como argumento opcional en el método log y en los métodos públicos (error, warn, info, debug).
+Este mensaje permite incluir detalles adicionales al mensaje principal.
+Objeto de log estructurado:
+
+Cada mensaje de log se imprime como un objeto JSON con tres propiedades:
+time: Contiene el tiempo en que se genera el mensaje (moment_of_call).
+message: El mensaje principal del log.
+custom_message: Mensaje adicional, opcional.
+Formato de salida:
+
+Se utiliza JSON.stringify para estructurar el objeto de log y mantener un formato legible y consistente en la consola.
+Ejemplo de salida:
+Si ejecutas el código, la salida se verá como:
 ```
-
-Beneficios de Usar Winston
-Control de Niveles:
-
-Puedes registrar mensajes como info, warn, error, o debug según el contexto.
-En producción, puedes filtrar para que solo se registren errores o advertencias.
-Logs Estructurados:
-
-Los logs se generan en formato JSON, lo que facilita integrarlos con herramientas como CloudWatch o ElasticSearch.
-Configuración Flexible:
-
-Diferentes configuraciones para entornos de desarrollo, prueba y producción.
-Posibilidad de enviar logs a múltiples destinos (consola, archivo, servicios externos).
-Compatibilidad con CI/CD:
-
-No habrá problemas con SonarQube o Veracode, ya que estas herramientas reconocen Winston como una práctica recomendada.
-Configuración para Entornos
-Para diferenciar entre desarrollo y producción, puedes usar una variable de entorno:
-
-```javascript
+plaintext
 Copiar
 Editar
-const logger = winston.createLogger({
-  level: process.env.LOG_LEVEL || "info",
-  format: winston.format.json(),
-  transports: [
-    new winston.transports.Console({
-      format: process.env.NODE_ENV === "development"
-        ? winston.format.combine(winston.format.colorize(), winston.format.simple())
-        : winston.format.json(),
-    }),
-  ],
-});
-```
-Esto asegura que los logs sean más detallados y fáciles de leer en desarrollo, pero optimizados para producción.
+[ERROR] {"time":"2025-01-23T10:00:00.000Z","message":"This is an error message","custom_message":"Additional context for the error"}
+[WARN] {"time":"2025-01-23T10:00:01.000Z","message":"This is a warning","custom_message":"Custom warning info"}
+[INFO] {"time":"2025-01-23T10:00:02.000Z","message":"Info message","custom_message":"More details about the info message"}
+[DEBUG] {"time":"2025-01-23T10:00:03.000Z","message":"Debug message","custom_message":"Debugging context"}
