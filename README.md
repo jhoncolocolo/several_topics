@@ -5,10 +5,20 @@ Aquí tienes una versión del Logger en TypeScript que incluye el tiempo de crea
 typescript
 Copiar
 Editar
+/**
+ * A Logger class for structured logging with support for log levels,
+ * request/response context, and additional data. Provides formatted log outputs
+ * that include timestamps and contextual information.
+ */
 export class Logger {
-  private levels: string[];
+  private readonly levels: string[];
   private currentLevel: number;
 
+  /**
+   * Initializes a new Logger instance with a specified log level.
+   * @param level The log level (error, warn, info, debug). Default is 'info'.
+   * @throws Error if an invalid log level is provided.
+   */
   constructor(level: string = 'info') {
     this.levels = ['error', 'warn', 'info', 'debug'];
     const levelIndex = this.levels.indexOf(level);
@@ -18,59 +28,91 @@ export class Logger {
     this.currentLevel = levelIndex;
   }
 
-  private log(level: string, message: string, customMessage: string = ''): void {
+  /**
+   * Logs a message with a specific log level, context type, and additional data.
+   * @param level The log level (error, warn, info, debug).
+   * @param message The main log message.
+   * @param type The log context type (REQUEST or RESPONSE).
+   * @param additionalData Optional additional data for context.
+   */
+  private log(
+    level: string,
+    message: string,
+    type: 'REQUEST' | 'RESPONSE',
+    additionalData: string = ''
+  ): void {
     const levelIndex = this.levels.indexOf(level);
     if (levelIndex <= this.currentLevel) {
       const momentOfCall = new Date().toISOString();
-      const logObject = {
-        time: momentOfCall,
-        message: message,
-        custom_message: customMessage,
-      };
-      console.log(`[${level.toUpperCase()}]`, JSON.stringify(logObject));
+      const logMessage = `["${momentOfCall}"] -[${type}] - [${level.toUpperCase()}] - ${JSON.stringify({
+        message,
+        ...(additionalData && { additional_data: additionalData }),
+      })}`;
+      console.log(logMessage);
     }
   }
 
-  public error(message: string, customMessage: string = ''): void {
-    this.log('error', message, customMessage);
+  /**
+   * Logs a message for a request context.
+   * @param message The main log message.
+   * @param level The log level (error, warn, info, debug).
+   * @param additionalData Optional additional data for context.
+   */
+  public request(message: string, level: string, additionalData: string = ''): void {
+    this.log(level, message, 'REQUEST', additionalData);
   }
 
-  public warn(message: string, customMessage: string = ''): void {
-    this.log('warn', message, customMessage);
+  /**
+   * Logs a message for a response context.
+   * @param message The main log message.
+   * @param level The log level (error, warn, info, debug).
+   * @param additionalData Optional additional data for context.
+   */
+  public response(message: string, level: string, additionalData: string = ''): void {
+    this.log(level, message, 'RESPONSE', additionalData);
   }
 
-  public info(message: string, customMessage: string = ''): void {
-    this.log('info', message, customMessage);
+  /**
+   * Logs an error message with a specific context.
+   * @param message The error message to log.
+   * @param additionalData Optional additional data for context.
+   * @param type The log context type (REQUEST or RESPONSE). Default is REQUEST.
+   */
+  public error(message: string, additionalData: string = '', type: 'REQUEST' | 'RESPONSE' = 'REQUEST'): void {
+    this.log('error', message, type, additionalData);
   }
 
-  public debug(message: string, customMessage: string = ''): void {
-    this.log('debug', message, customMessage);
+  /**
+   * Logs a warning message with a specific context.
+   * @param message The warning message to log.
+   * @param additionalData Optional additional data for context.
+   * @param type The log context type (REQUEST or RESPONSE). Default is REQUEST.
+   */
+  public warn(message: string, additionalData: string = '', type: 'REQUEST' | 'RESPONSE' = 'REQUEST'): void {
+    this.log('warn', message, type, additionalData);
+  }
+
+  /**
+   * Logs an informational message with a specific context.
+   * @param message The informational message to log.
+   * @param additionalData Optional additional data for context.
+   * @param type The log context type (REQUEST or RESPONSE). Default is REQUEST.
+   */
+  public info(message: string, additionalData: string = '', type: 'REQUEST' | 'RESPONSE' = 'REQUEST'): void {
+    this.log('info', message, type, additionalData);
+  }
+
+  /**
+   * Logs a debug message with a specific context.
+   * @param message The debug message to log.
+   * @param additionalData Optional additional data for context.
+   * @param type The log context type (REQUEST or RESPONSE). Default is REQUEST.
+   */
+  public debug(message: string, additionalData: string = '', type: 'REQUEST' | 'RESPONSE' = 'REQUEST'): void {
+    this.log('debug', message, type, additionalData);
   }
 }
 
-// Usage
-const logger = new Logger('info');
-
-logger.error('This is an error message', 'Additional context for the error'); 
-logger.warn('This is a warning', 'Custom warning info');        
-logger.info('Info message', 'More details about the info message');             
-logger.debug('Debug message', 'Debugging context'); 
-Cambios realizados:
-Nuevo parámetro customMessage:
-
-Se agregó como argumento opcional en el método log y en los métodos públicos (error, warn, info, debug).
-Este mensaje permite incluir detalles adicionales al mensaje principal.
-Objeto de log estructurado:
-
-Cada mensaje de log se imprime como un objeto JSON con tres propiedades:
-time: Contiene el tiempo en que se genera el mensaje (moment_of_call).
-message: El mensaje principal del log.
-custom_message: Mensaje adicional, opcional.
-Formato de salida:
-
-Se utiliza JSON.stringify para estructurar el objeto de log y mantener un formato legible y consistente en la consola.
-Ejemplo de salida:
-Si ejecutas el código, la salida se verá como:
 ```
 plaintext
 Copiar
