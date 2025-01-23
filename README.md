@@ -133,3 +133,11 @@ En resumen:
 La resolución de problemas en funciones Lambda implica una combinación de análisis de logs, depuración de código, verificación de la configuración y comprensión de los conceptos básicos de AWS. Al seguir estos pasos y utilizando las herramientas adecuadas, podrás identificar y solucionar la mayoría de los problemas que puedas encontrar.
 
 ¿Te gustaría profundizar en algún aspecto específico de la resolución de problemas en funciones Lambda?
+
+Administración de usuarios:
+
+En este escenario, la administración de usuarios se centra principalmente en:
+
+IAM: Para gestionar los permisos de los servicios de AWS.
+GitHub Enterprise: Para controlar el acceso al código fuente.
+Azure Pipelines: Para automatizar el proceso de despliegue.
