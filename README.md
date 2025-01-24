@@ -1,166 +1,254 @@
 
 ```javascript
-generateSeed.js
-javascript
+1. logger/Logger.ts
+Clase para la bitácora estructurada.
+
+typescript
+Copiar
+Editar
+export class Logger {
+  private readonly levels: string[];
+  private readonly currentLevel: number;
+
+  constructor(level: string = 'info') {
+    this.levels = ['error', 'warn', 'info', 'debug'];
+    const levelIndex = this.levels.indexOf(level);
+    if (levelIndex === -1) {
+      throw new Error(`Invalid log level: ${level}`);
+    }
+    this.currentLevel = levelIndex;
+  }
+
+  private log(
+    level: string,
+    message: string,
+    type: 'REQUEST' | 'RESPONSE',
+    additionalData: string = ''
+  ): void {
+    const levelIndex = this.levels.indexOf(level);
+    if (levelIndex <= this.currentLevel) {
+      const timestamp = new Date().toISOString();
+      const logMessage = `["${timestamp}"] -[${type}] - [${level.toUpperCase()}] - ${JSON.stringify({
+        message,
+        ...(additionalData && { additional_data: additionalData }),
+      })}`;
+      console.log(logMessage);
+    }
+  }
+
+  public request(message: string, level: string, additionalData: string = ''): void {
+    this.log(level, message, 'REQUEST', additionalData);
+  }
+
+  public response(message: string, level: string, additionalData: string = ''): void {
+    this.log(level, message, 'RESPONSE', additionalData);
+  }
+}
+2. services/generateSeed.ts
+Servicio para generar una semilla aleatoria.
+
+typescript
 Copiar
 Editar
 import crypto from 'crypto';
 
-export const generateSeed = () => {
+export const generateSeed = (): string => {
   const byteSize = 120;
   const randomBytes = crypto.randomBytes(byteSize);
   return randomBytes.toString('base64');
 };
-Logger.js
-Incluye la clase Logger que ya proporcionaste. No es necesario modificarla.
+3. handler.ts
+Archivo principal que implementa el handler.
 
-handler.js
-Integra la clase Logger y añade las bitácoras:
-
-javascript
+typescript
 Copiar
 Editar
 import crypto from 'crypto';
-import { generateSeed } from './generateSeed.js';
-import { Logger } from './Logger.js';
+import { generateSeed } from './services/generateSeed';
+import { Logger } from './logger/Logger';
 
-const logger = new Logger('info');
+const logger = new Logger();
 
-export const handler = async (event) => {
-  let transactionId = event?.transactionId || null;
+export const handler = async (event: { transactionId?: string }) => {
+  let transactionId = event.transactionId || null;
 
-  // Log para la solicitud
-  const requestMessage = JSON.stringify({ transactionId });
-  logger.request(requestMessage, 'info');
+  logger.request(JSON.stringify({ transactionId }), 'info');
 
-  // Generación de la semilla
   if (!transactionId) {
     transactionId = crypto.randomUUID();
   }
+
   const seed = generateSeed();
 
-  // Log para la respuesta
-  const responseMessage = JSON.stringify({
-    seed: '**CONFIDENTIAL**',
-    transactionId,
-  });
-  logger.response(responseMessage, 'info');
+  logger.response(
+    JSON.stringify({
+      seed: '**CONFIDENTIAL**',
+      transactionId,
+    }),
+    'info'
+  );
 
-  return {
-    seed,
-    transactionId,
-  };
+  return { seed, transactionId };
 };
-Pruebas unitarias
-tests/Logger.test.js
-Pruebas para la clase Logger:
+4. tests/handler.test.ts
+Pruebas unitarias para handler.ts.
 
-javascript
+typescript
 Copiar
 Editar
-import { Logger } from '../src/Logger.js';
+import { handler } from '../handler';
 
-describe('Logger', () => {
-  let logger;
-  let consoleSpy;
+describe('Handler Tests', () => {
+  it('should log request and response correctly when transactionId is provided', async () => {
+    const event = { transactionId: '12345' };
+    const response = await handler(event);
 
-  beforeEach(() => {
-    logger = new Logger('info');
-    consoleSpy = jest.spyOn(console, 'log').mockImplementation(() => {});
+    expect(response).toHaveProperty('seed');
+    expect(response.transactionId).toBe('12345');
   });
+
+  it('should generate a new transactionId if none is provided', async () => {
+    const event = {};
+    const response = await handler(event);
+
+    expect(response).toHaveProperty('seed');
+    expect(response.transactionId).toBeDefined();
+  });
+});
+5. tests/Logger.test.ts
+Pruebas unitarias para Logger.ts.
+
+typescript
+Copiar
+Editar
+import { Logger } from '../logger/Logger';
+
+describe('Logger Tests', () => {
+  const mockConsole = jest.spyOn(console, 'log').mockImplementation();
 
   afterEach(() => {
-    consoleSpy.mockRestore();
+    mockConsole.mockClear();
   });
 
-  it('should log a request message', () => {
-    logger.request('Request log message', 'info', '{"data":"value"}');
-    expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('Request log message'));
-    expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('"additional_data":"{\\"data\\":\\"value\\"}"'));
+  it('should log request messages', () => {
+    const logger = new Logger('info');
+    logger.request('Test request', 'info', 'additional data');
+
+    expect(mockConsole).toHaveBeenCalledTimes(1);
+    expect(mockConsole.mock.calls[0][0]).toContain('Test request');
   });
 
-  it('should log a response message', () => {
-    logger.response('Response log message', 'info', '{"status":"ok"}');
-    expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('Response log message'));
-    expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('"additional_data":"{\\"status\\":\\"ok\\"}"'));
+  it('should not log messages below the log level', () => {
+    const logger = new Logger('warn');
+    logger.request('This should not log', 'info');
+
+    expect(mockConsole).not.toHaveBeenCalled();
   });
 
-  it('should not log a debug message if the level is info', () => {
-    logger.debug('Debug log message');
-    expect(consoleSpy).not.toHaveBeenCalled();
+  it('should throw error for invalid log levels', () => {
+    expect(() => new Logger('invalid')).toThrow('Invalid log level: invalid');
   });
 });
-tests/handler.test.js
-Pruebas para el manejador, incluyendo la validación de las bitácoras:
+6. package.json
+Configuración del proyecto.
+
+json
+Copiar
+Editar
+{
+  "name": "lambda-ts-logger",
+  "version": "1.0.0",
+  "description": "AWS Lambda example with structured logging and TypeScript",
+  "main": "handler.ts",
+  "scripts": {
+    "test": "jest",
+    "build": "tsc"
+  },
+  "dependencies": {
+    "crypto": "^1.0.1"
+  },
+  "devDependencies": {
+    "jest": "^29.0.0",
+    "ts-jest": "^29.0.0",
+    "typescript": "^4.0.0"
+  }
+}
+7. tsconfig.json
+Configuración de TypeScript.
+
+json
+Copiar
+Editar
+{
+  "compilerOptions": {
+    "target": "ES2020",
+    "module": "commonjs",
+    "strict": true,
+    "esModuleInterop": true,
+    "outDir": "dist"
+  },
+  "include": ["**/*.ts"],
+  "exclude": ["node_modules", "dist"]
+}
+8. jest.config.js
+Configuración de Jest para TypeScript.
 
 javascript
 Copiar
 Editar
-import crypto from 'crypto';
-import { handler } from '../src/handler.js';
-import { generateSeed } from '../src/generateSeed.js';
-import { Logger } from '../src/Logger.js';
+export default {
+  preset: 'ts-jest',
+  testEnvironment: 'node',
+  verbose: true,
+  collectCoverage: true,
+  coverageDirectory: 'coverage',
+  coverageReporters: ['text', 'lcov'],
+};
+9. .gitignore
+Archivos a ignorar por Git.
 
-jest.mock('../src/generateSeed.js', () => ({
-  generateSeed: jest.fn(() => 'mockedSeed'),
-}));
+Copiar
+Editar
+node_modules/
+dist/
+coverage/
+10. README.md
+Archivo de documentación.
 
-jest.mock('../src/Logger.js', () => {
-  const mockLogger = {
-    request: jest.fn(),
-    response: jest.fn(),
-  };
-  return { Logger: jest.fn(() => mockLogger) };
-});
+markdown
+Copiar
+Editar
+# Lambda TypeScript Logger
 
-describe('handler', () => {
-  let loggerMock;
+Este proyecto es un ejemplo de AWS Lambda implementado con TypeScript y pruebas unitarias en Jest.
 
-  beforeEach(() => {
-    loggerMock = new Logger();
-  });
+## Estructura del Proyecto
+- `logger/`: Contiene la clase `Logger` para bitácoras estructuradas.
+- `services/`: Contiene el servicio `generateSeed`.
+- `tests/`: Pruebas unitarias.
+- `handler.ts`: Código principal del Lambda.
 
-  it('should log request and response correctly when transactionId is provided', async () => {
-    const event = { transactionId: 'existing-id' };
-    const result = await handler(event);
+## Instalación
+1. Instala las dependencias:
+   ```bash
+   npm install
+Compila el proyecto:
 
-    expect(loggerMock.request).toHaveBeenCalledWith(
-      '{"transactionId":"existing-id"}',
-      'info'
-    );
+bash
+Copiar
+Editar
+npm run build
+Ejecuta las pruebas:
 
-    expect(loggerMock.response).toHaveBeenCalledWith(
-      '{"seed":"**CONFIDENTIAL**","transactionId":"existing-id"}',
-      'info'
-    );
+bash
+Copiar
+Editar
+npm test
+yaml
+Copiar
+Editar
 
-    expect(result).toEqual({
-      seed: 'mockedSeed',
-      transactionId: 'existing-id',
-    });
-  });
+---
 
-  it('should log request and response correctly when transactionId is not provided', async () => {
-    jest.spyOn(crypto, 'randomUUID').mockReturnValue('generated-id');
-    const event = {};
-    const result = await handler(event);
-
-    expect(loggerMock.request).toHaveBeenCalledWith(
-      '{"transactionId":null}',
-      'info'
-    );
-
-    expect(loggerMock.response).toHaveBeenCalledWith(
-      '{"seed":"**CONFIDENTIAL**","transactionId":"generated-id"}',
-      'info'
-    );
-
-    expect(result).toEqual({
-      seed: 'mockedSeed',
-      transactionId: 'generated-id',
-    });
-
-    crypto.randomUUID.mockRestore();
-  });
-});
+¡Con esta estructura tienes un proyecto bien organizado y listo para usar en TypeScript! 🚀
 ```
