@@ -1,26 +1,42 @@
  ```
-import { execSync } from 'child_process';
+const { execSync, spawn } = require("child_process");
+const path = require("path");
 
-const parametrosBase: string = "789456 ASDASDASDASDSA";
-const fechaBase: string = "2023-10-27"; // Mantén la fecha constante
+// Parámetros constantes
+const validToken = "789456";
+const validSeed = "ASDASDASDASDSA";
 
-// Generar horas variadas (ejemplo: de 10:00 a 14:00 con incrementos de 1 hora)
-for (let hora: number = 10; hora <= 14; hora++) {
-  const horaFormateada: string = hora.toString().padStart(2, '0'); // Asegura dos dígitos para la hora
-  const fechaHora: string = `"${fechaBase} ${horaFormateada}:30:00"`; // Formato de fecha y hora
+// Ruta del script compilado
+const scriptPath = path.join(__dirname, "dist", "tests", "index.test.js");
 
-  const comando: string = `node dist/index.test.local.js ${parametrosBase} ${fechaHora}`;
-
-  console.log(`Ejecutando: ${comando}`);
-
-  try {
-    const resultado: string = execSync(comando, { encoding: 'utf-8' });
-    console.log(resultado); // Imprime la salida del script principal
-  } catch (error: any) {
-    console.error(`Error al ejecutar: ${comando}`);
-    console.error(error.stderr); // Imprime el error
-  }
+// Función para generar la fecha y hora actual en formato YYYY-MM-DD HH:mm:ss
+function getCurrentDateTime() {
+    const now = new Date();
+    return now.toISOString().replace("T", " ").substring(0, 19);
 }
 
-console.log("Ciclo completado.");
+// Compilar TypeScript antes de ejecutar
+console.log("Compilando TypeScript...");
+try {
+    execSync("npm run build", { stdio: "inherit" });
+    console.log("Compilación completada.\n");
+} catch (error) {
+    console.error("Error al compilar TypeScript. Revisa los errores.");
+    process.exit(1);
+}
+
+// Ejecutar el script en un bucle con nuevas fechas cada 5 segundos
+setInterval(() => {
+    const dateTime = getCurrentDateTime();
+    console.log(`Ejecutando con fecha y hora: ${dateTime}`);
+
+    const process = spawn("node", [scriptPath, validToken, validSeed, dateTime], {
+        stdio: "inherit", // Para mostrar la salida en la consola
+    });
+
+    process.on("exit", (code) => {
+        console.log(`Proceso finalizado con código: ${code}`);
+    });
+}, 5000); // Ejecutar cada 5 segundos
+
 ```
