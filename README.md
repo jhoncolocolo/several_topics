@@ -1,16 +1,16 @@
  ```
-const { execSync, spawn } = require("child_process");
-const path = require("path");
+import { execSync, spawn } from "child_process";
+import path from "path";
 
 // Parámetros constantes
 const validToken = "789456";
 const validSeed = "ASDASDASDASDSA";
 
 // Ruta del script compilado
-const scriptPath = path.join(__dirname, "dist", "tests", "index.test.js");
+const scriptPath = path.join(__dirname, "dist", "index.test.local.js");
 
 // Función para generar la fecha y hora actual en formato YYYY-MM-DD HH:mm:ss
-function getCurrentDateTime() {
+function getCurrentDateTime(): string {
     const now = new Date();
     return now.toISOString().replace("T", " ").substring(0, 19);
 }
@@ -38,5 +38,15 @@ setInterval(() => {
         console.log(`Proceso finalizado con código: ${code}`);
     });
 }, 5000); // Ejecutar cada 5 segundos
+
+```
+
+
+```
+"scripts": {
+    "build": "tsc",
+    "test": "node dist/tests/index.test.js",
+    "run-with-datetime": "tsc && node dist/run_with_datetime.js"
+}
 
 ```
