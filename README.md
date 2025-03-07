@@ -1,11 +1,26 @@
-# several_topics
+ ```
+ const { execSync } = require('child_process');
 
-| **Categoría**                         | **Cosmos DB**          | **Amazon DynamoDB**             | **Amazon DocumentDB**       | **Amazon OpenSearch**         | **MongoDB en EC2**           |
-|--------------------------------------|-----------------------|---------------------------------|-----------------------------|------------------------------|------------------------------|
-| **Configuración de Particionamiento** | 🔹 Partition Key (paisId) | ✅ Partition Key (paisId + último_dígito) | 🔹 Índices compuestos (paisId, _id) | 🔹 Sharding automático basado en paisId | 🔹 Índices compuestos (paisId, _id) |
-| **Configuración de Búsquedas**       | ✅ Indexación Global   | 🔹 Limitado (requiere índices secundarios) | ✅ Avanzadas (uso de agregaciones y text search) | ✅ Rápidas (full-text search, agregaciones avanzadas) | ✅ Avanzadas (soporta text search y agregaciones) |
-| **Casos de Uso Principales**         | 🌍 Aplicaciones globales con baja latencia | 🚀 Datos estructurados con acceso rápido y escalabilidad | 📄 JSON dinámico, consultas flexibles | 🔍 Búsquedas complejas, análisis de datos | 🔄 Consultas flexibles, análisis de datos |
-| **Tecnología**                        | NoSQL (multi-modelo)  | NoSQL (clave-valor)            | NoSQL (documentos, basado en MongoDB) | NoSQL (motor de búsqueda distribuido) | NoSQL (documentos) |
-| **Concepto**                          | Base de datos NoSQL globalmente distribuida | Base de datos NoSQL con escalabilidad automática | Versión administrada de MongoDB optimizada para AWS | Búsquedas full-text y analítica avanzada | Base de datos NoSQL con control total en EC2 |
-| **Ejemplo**                           | `db.usuarios.createIndex({ paisId: 1, idUsuario: 1 })` | `table.put({ "partitionKey": "CO#123", "atributo": "valor" })` | `db.usuarios.createIndex({ paisId: 1, _id: 1 })` | `PUT /usuarios { "settings": { "index.number_of_shards": 3 } }` | `db.usuarios.createIndex({ paisId: 1, _id: 1 })` |
-| **Límite por Partición/Shard**        | ⚠️ 20GB por partición | ⚠️ 10GB por partición | 📌 No usa sharding nativo, pero límite de 16MB por documento | 🔥 50GB por shard recomendado | 🚫 No tiene límite por shard, pero 16MB por documento |
+const parametrosBase = "789456 ASDASDASDASDSA";
+const fechaBase = "2023-10-27"; // Mantén la fecha constante
+
+// Generar horas variadas (ejemplo: de 10:00 a 14:00 con incrementos de 1 hora)
+for (let hora = 10; hora <= 14; hora++) {
+  const horaFormateada = hora.toString().padStart(2, '0'); // Asegura dos dígitos para la hora
+  const fechaHora = `"${fechaBase} ${horaFormateada}:30:00"`; // Formato de fecha y hora
+
+  const comando = `node dist/index.test.local.js ${parametrosBase} ${fechaHora}`;
+
+  console.log(`Ejecutando: ${comando}`);
+
+  try {
+    const resultado = execSync(comando, { encoding: 'utf-8' });
+    console.log(resultado); // Imprime la salida del script principal
+  } catch (error) {
+    console.error(`Error al ejecutar: ${comando}`);
+    console.error(error.stderr); // Imprime el error
+  }
+}
+
+console.log("Ciclo completado.");
+```
