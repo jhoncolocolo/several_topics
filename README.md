@@ -1,52 +1,24 @@
  ```
-import { execSync, spawn } from "child_process";
-import path from "path";
-
-// Parámetros constantes
-const validToken = "789456";
-const validSeed = "ASDASDASDASDSA";
-
-// Ruta del script compilado
-const scriptPath = path.join(__dirname, "dist", "index.test.local.js");
-
-// Función para generar la fecha y hora actual en formato YYYY-MM-DD HH:mm:ss
-function getCurrentDateTime(): string {
-    const now = new Date();
-    return now.toISOString().replace("T", " ").substring(0, 19);
+function timestampToDate(timestamp: number): string {
+    const date = new Date(timestamp * 1000); // Convertir de segundos a milisegundos
+    return date.toISOString(); // Formato ISO 8601
 }
 
-// Compilar TypeScript antes de ejecutar
-console.log("Compilando TypeScript...");
-try {
-    execSync("npm run build", { stdio: "inherit" });
-    console.log("Compilación completada.\n");
-} catch (error) {
-    console.error("Error al compilar TypeScript. Revisa los errores.");
-    process.exit(1);
-}
-
-// Ejecutar el script en un bucle con nuevas fechas cada 5 segundos
-setInterval(() => {
-    const dateTime = getCurrentDateTime();
-    console.log(`Ejecutando con fecha y hora: ${dateTime}`);
-
-    const process = spawn("node", [scriptPath, validToken, validSeed, dateTime], {
-        stdio: "inherit", // Para mostrar la salida en la consola
-    });
-
-    process.on("exit", (code) => {
-        console.log(`Proceso finalizado con código: ${code}`);
-    });
-}, 5000); // Ejecutar cada 5 segundos
+// Ejemplo de uso:
+console.log(timestampToDate(1741379279)); // "2025-03-07T20:27:59.000Z"
 
 ```
 
 
 ```
-"scripts": {
-    "build": "tsc",
-    "test": "node dist/tests/index.test.js",
-    "run-with-datetime": "tsc && node dist/run_with_datetime.js"
+function dateStringToTimestamp(dateString: string): number {
+    const date = new Date(dateString.replace(" ", "T") + "Z"); // Convertir a formato ISO
+    return Math.floor(date.getTime() / 1000); // Convertir de milisegundos a segundos
 }
+
+// Ejemplo de uso:
+console.log(dateStringToTimestamp("2025-03-07 20:27:59")); // 1741379279
+
+
 
 ```
