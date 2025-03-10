@@ -63,3 +63,34 @@ fs.writeFile(nombreArchivo, contenidoArchivo, (err) => {
   }
 });
 ```
+```
+import * as fs from "fs";
+import path from "path";
+
+// Archivo donde se guardarán los logs
+const logPath = path.join(__dirname, "execution.log");
+const logStream = fs.createWriteStream(logPath, { flags: "w" });
+
+// Guardar la referencia original de console.log
+const originalConsoleLog = console.log;
+const originalConsoleError = console.error;
+
+// Sobrescribir console.log para capturar la salida
+console.log = function (...args) {
+    const message = args.map(arg => String(arg)).join(" ");
+    logStream.write(`[LOG] ${message}\n`);
+    originalConsoleLog.apply(console, args);
+};
+
+// Sobrescribir console.error para capturar errores
+console.error = function (...args) {
+    const message = args.map(arg => String(arg)).join(" ");
+    logStream.write(`[ERROR] ${message}\n`);
+    originalConsoleError.apply(console, args);
+};
+
+// Cerrar el archivo cuando el proceso termine
+process.on("exit", () => {
+    logStream.end();
+});
+```
