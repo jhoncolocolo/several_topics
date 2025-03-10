@@ -23,4 +23,43 @@ console.log(dateStringToTimestamp("2025-03-07 20:27:59")); // 1741379279
 
 ```
 
-https://teams.live.com/meet/9342702528229
+```
+const fs = require('fs');
+
+function generarCadenaAleatoria(longitud) {
+  let resultado = '';
+  const caracteres = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=';
+  const caracteresLength = caracteres.length;
+  for (let i = 0; i < longitud; i++) {
+    resultado += caracteres.charAt(Math.floor(Math.random() * caracteresLength));
+  }
+  return resultado;
+}
+
+function codificarBase64(cadena) {
+  return Buffer.from(cadena).toString('base64');
+}
+
+const numCadenas = 10000;
+const longitudCadena = 64;
+const nombreArchivo = 'data.ts';
+
+let contenidoArchivo = `interface Data {\n  strings: string[];\n}\n\nconst data: Data = {\n  strings: [\n`;
+
+for (let i = 0; i < numCadenas; i++) {
+  const cadenaAleatoria = generarCadenaAleatoria(longitudCadena);
+  const cadenaBase64 = codificarBase64(cadenaAleatoria);
+  contenidoArchivo += `    "${cadenaBase64}",\n`;
+}
+
+contenidoArchivo = contenidoArchivo.slice(0, -2); // Elimina la última coma y salto de línea
+contenidoArchivo += `\n  ]\n};\n\nexport default data;\n`;
+
+fs.writeFile(nombreArchivo, contenidoArchivo, (err) => {
+  if (err) {
+    console.error('Error al escribir el archivo:', err);
+  } else {
+    console.log(`Se ha generado y escrito ${numCadenas} cadenas en ${nombreArchivo}`);
+  }
+});
+```
