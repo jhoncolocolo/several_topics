@@ -102,7 +102,7 @@ const fs = require('fs');
 const csv = require('csv-parser');
 
 // Obtener los argumentos de la línea de comandos
-const args = process.argv.slice(2); // Los argumentos empiezan en el índice 2
+const args = process.argv.slice(2);
 
 if (args.length !== 3) {
   console.error('Uso: node generador_data_ts_csv.js <nombre_columna> <nombre_archivo_csv> <nombre_archivo_a_crear>');
@@ -118,8 +118,15 @@ const semillas = [];
 fs.createReadStream(nombreArchivoCSV)
   .pipe(csv())
   .on('data', (row) => {
-    if (row[nombreColumna]) {
-      semillas.push(row[nombreColumna]);
+    let valorColumna = row[nombreColumna];
+
+    // Intenta acceder a la columna con apóstrofes si no se encuentra directamente
+    if (valorColumna === undefined) {
+      valorColumna = row[`'${nombreColumna}'`];
+    }
+
+    if (valorColumna !== undefined) {
+      semillas.push(valorColumna);
     } else {
       console.error(`Advertencia: La columna '${nombreColumna}' no existe en la fila:`, row);
     }
@@ -131,7 +138,7 @@ fs.createReadStream(nombreArchivoCSV)
       contenidoArchivo += `    "${semilla}",\n`;
     });
 
-    contenidoArchivo = contenidoArchivo.slice(0, -2); // Elimina la última coma y salto de línea
+    contenidoArchivo = contenidoArchivo.slice(0, -2);
     contenidoArchivo += `\n  ]\n};\n\nexport default data;\n`;
 
     fs.writeFile(nombreArchivoTS, contenidoArchivo, (err) => {
