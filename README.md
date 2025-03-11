@@ -199,3 +199,44 @@ if (isNaN(numCadenas) || numCadenas <= 0) {
 
 generarYCadenas(numCadenas);
 ```
+
+```
+
+import * as fs from "fs";
+import path from "path";
+
+// Leer el argumento de la línea de comandos
+const enableLogging = process.argv[3] === "true";
+
+let logStream: fs.WriteStream | null = null;
+
+if (enableLogging) {
+    // Archivo donde se guardarán los logs
+    const logPath = path.join(__dirname, "execution.log");
+    logStream = fs.createWriteStream(logPath, { flags: "w" });
+}
+
+// Guardar la referencia original de console.log
+const originalConsoleLog = console.log;
+const originalConsoleError = console.error;
+
+// Sobrescribir console.log si está activado
+if (enableLogging && logStream) {
+    console.log = function (...args) {
+        const message = args.map(arg => String(arg)).join(" ");
+        logStream.write(`[LOG] ${message}\n`);
+        originalConsoleLog.apply(console, args);
+    };
+
+    console.error = function (...args) {
+        const message = args.map(arg => String(arg)).join(" ");
+        logStream.write(`[ERROR] ${message}\n`);
+        originalConsoleError.apply(console, args);
+    };
+
+    // Cerrar el archivo cuando el proceso termine
+    process.on("exit", () => {
+        logStream?.end();
+    });
+}
+```
