@@ -94,3 +94,52 @@ process.on("exit", () => {
     logStream.end();
 });
 ```
+
+```
+//command node generador_since_cvs.js semilla input.csv data.ts
+//dependencies  npm install csv-parser
+const fs = require('fs');
+const csv = require('csv-parser');
+
+// Obtener los argumentos de la línea de comandos
+const args = process.argv.slice(2); // Los argumentos empiezan en el índice 2
+
+if (args.length !== 3) {
+  console.error('Uso: node generador_data_ts_csv.js <nombre_columna> <nombre_archivo_csv> <nombre_archivo_a_crear>');
+  process.exit(1);
+}
+
+const nombreColumna = args[0];
+const nombreArchivoCSV = args[1];
+const nombreArchivoTS = args[2];
+
+const semillas = [];
+
+fs.createReadStream(nombreArchivoCSV)
+  .pipe(csv())
+  .on('data', (row) => {
+    if (row[nombreColumna]) {
+      semillas.push(row[nombreColumna]);
+    } else {
+      console.error(`Advertencia: La columna '${nombreColumna}' no existe en la fila:`, row);
+    }
+  })
+  .on('end', () => {
+    let contenidoArchivo = `interface Data {\n  strings: string[];\n}\n\nconst data: Data = {\n  strings: [\n`;
+
+    semillas.forEach((semilla) => {
+      contenidoArchivo += `    "${semilla}",\n`;
+    });
+
+    contenidoArchivo = contenidoArchivo.slice(0, -2); // Elimina la última coma y salto de línea
+    contenidoArchivo += `\n  ]\n};\n\nexport default data;\n`;
+
+    fs.writeFile(nombreArchivoTS, contenidoArchivo, (err) => {
+      if (err) {
+        console.error('Error al escribir el archivo:', err);
+      } else {
+        console.log(`Se ha generado y escrito ${semillas.length} cadenas en ${nombreArchivoTS}`);
+      }
+    });
+  });
+```
