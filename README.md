@@ -98,10 +98,9 @@ process.on("exit", () => {
 ```
 //command node generador_since_cvs.js semilla input.csv data.ts
 //dependencies  npm install csv-parser
-const fs = require('fs');
+ const fs = require('fs');
 const csv = require('csv-parser');
 
-// Obtener los argumentos de la línea de comandos
 const args = process.argv.slice(2);
 
 if (args.length !== 3) {
@@ -109,21 +108,29 @@ if (args.length !== 3) {
   process.exit(1);
 }
 
-const nombreColumna = args[0];
+const nombreColumna = args[0].replace(/['"]/g, ''); // Elimina comillas simples y dobles
 const nombreArchivoCSV = args[1];
 const nombreArchivoTS = args[2];
 
 const semillas = [];
+let headers = null;
 
 fs.createReadStream(nombreArchivoCSV)
   .pipe(csv())
+  .on('headers', (headerList) => {
+    // Normaliza los nombres de las columnas eliminando apóstrofes o comillas
+    headers = headerList.map(header => header.replace(/['"]/g, ''));
+    console.log('Nombres de columnas detectados:', headers);
+  })
   .on('data', (row) => {
-    let valorColumna = row[nombreColumna];
-
-    // Intenta acceder a la columna con apóstrofes si no se encuentra directamente
-    if (valorColumna === undefined) {
-      valorColumna = row[`'${nombreColumna}'`];
+    // Normaliza las claves del objeto row para que coincidan con los encabezados limpiados
+    const rowNormalized = {};
+    for (const key in row) {
+      const cleanKey = key.replace(/['"]/g, '');
+      rowNormalized[cleanKey] = row[key];
     }
+
+    let valorColumna = rowNormalized[nombreColumna];
 
     if (valorColumna !== undefined) {
       semillas.push(valorColumna);
@@ -149,4 +156,5 @@ fs.createReadStream(nombreArchivoCSV)
       }
     });
   });
+
 ```
