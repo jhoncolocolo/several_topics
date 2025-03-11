@@ -158,3 +158,44 @@ fs.createReadStream(nombreArchivoCSV)
   });
 
 ```
+```
+// generador_cadenas.ts
+import crypto from 'crypto';
+
+export const generate = (): string => {
+  const byteSize = 120;
+  const ramdomBytes = crypto.randomBytes(byteSize);
+  return ramdomBytes.toString('base64');
+};
+
+function ejecutarOtraFuncion(cadenas: string[]) {
+  // Aquí va la lógica de tu otra función
+  console.log('Ejecutando otra función con las cadenas generadas:');
+  console.log(cadenas);
+  // Por ejemplo, podrías escribir las cadenas en un archivo:
+  // fs.writeFileSync('cadenas.txt', cadenas.join('\n'));
+}
+
+function generarYCadenas(numCadenas: number) {
+  const cadenas: string[] = [];
+  for (let i = 0; i < numCadenas; i++) {
+    cadenas.push(generate());
+  }
+  ejecutarOtraFuncion(cadenas);
+}
+
+// Leer el número desde la consola
+const args = process.argv.slice(2);
+if (args.length !== 1) {
+  console.error('Uso: node generador_cadenas.js <numero_cadenas>');
+  process.exit(1);
+}
+
+const numCadenas = parseInt(args[0], 10);
+if (isNaN(numCadenas) || numCadenas <= 0) {
+  console.error('El número de cadenas debe ser un entero positivo.');
+  process.exit(1);
+}
+
+generarYCadenas(numCadenas);
+```
