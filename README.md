@@ -240,3 +240,32 @@ if (enableLogging && logStream) {
     });
 }
 ```
+
+```
+"use strict";
+// ciclo_minutos.ts
+function generarCicloMinutos(fechaInicio, fechaFin) {
+    let fechaActual = new Date(fechaInicio);
+    while (fechaActual <= fechaFin) {
+        console.log(fechaActual.toISOString()); // Imprime la fecha y hora actual
+        // Incrementa un minuto
+        fechaActual.setMinutes(fechaActual.getMinutes() + 1);
+    }
+}
+// Leer los argumentos de la consola
+const args = process.argv.slice(2);
+if (args.length !== 2) {
+    console.error('Uso: node ciclo_minutos.js <fecha_inicio_iso> <fecha_fin_iso>');
+    console.error('Ejemplo: node ciclo_minutos.js "2024-10-27T00:00:00.000Z" "2024-10-27T23:59:00.000Z"');
+    process.exit(1);
+}
+const fechaInicioISO = args[0];
+const fechaFinISO = args[1];
+const fechaInicio = new Date(fechaInicioISO);
+const fechaFin = new Date(fechaFinISO);
+if (isNaN(fechaInicio.getTime()) || isNaN(fechaFin.getTime())) {
+    console.error('Fechas inválidas. Use formato ISO 8601.');
+    process.exit(1);
+}
+generarCicloMinutos(fechaInicio, fechaFin);
+```
