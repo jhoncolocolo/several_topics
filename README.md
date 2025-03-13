@@ -281,3 +281,79 @@ if (isNaN(fechaInicio.getTime()) || isNaN(fechaFin.getTime())) {
 
 generarCicloMinutos(fechaInicio, fechaFin);
 ```
+
+```
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Generar Minutos Alrededor</title>
+</head>
+<body>
+
+  <label for="miInputDateTime">Selecciona fecha y hora:</label>
+  <input type="datetime-local" id="miInputDateTime" value="2024-10-27T23:59">
+
+  <br><br>
+
+  <button id="generarBtn">Generar Minutos</button>
+
+  <br><br>
+
+  <textarea id="print" rows="10" cols="30"></textarea>
+
+  <script>
+    function aleatorios() {
+      return "asdasdas";
+    }
+
+    function generarMinutosAlrededor(fechaHoraString) {
+      const fechaHora = new Date(fechaHoraString);
+
+      if (isNaN(fechaHora.getTime())) {
+        console.error("Fecha y hora inválidas.");
+        return;
+      }
+
+      const minutosAlrededor = [];
+
+      // Dos minutos antes
+      for (let i = 2; i > 0; i--) {
+        const nuevaFecha = new Date(fechaHora);
+        nuevaFecha.setMinutes(fechaHora.getMinutes() - i);
+        minutosAlrededor.push(nuevaFecha.toISOString().slice(0, 16));
+      }
+
+      // Minuto actual
+      minutosAlrededor.push(fechaHora.toISOString().slice(0, 16));
+
+      // Dos minutos después
+      for (let i = 1; i <= 2; i++) {
+        const nuevaFecha = new Date(fechaHora);
+        nuevaFecha.setMinutes(fechaHora.getMinutes() + i);
+        minutosAlrededor.push(nuevaFecha.toISOString().slice(0, 16));
+      }
+
+      return minutosAlrededor;
+    }
+
+    const inputDateTime = document.getElementById("miInputDateTime");
+    const textareaPrint = document.getElementById("print");
+    const generarBtn = document.getElementById("generarBtn");
+
+    generarBtn.addEventListener("click", () => {
+      const fechaHora = inputDateTime.value;
+      const minutosGenerados = generarMinutosAlrededor(fechaHora);
+
+      let textoTextArea = "";
+      minutosGenerados.forEach((minuto) => {
+        const textoAleatorio = aleatorios();
+        textoTextArea += minuto + " " + textoAleatorio + "\n";
+      });
+
+      textareaPrint.value = textoTextArea;
+    });
+  </script>
+
+</body>
+</html>
+```
