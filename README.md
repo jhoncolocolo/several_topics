@@ -302,8 +302,14 @@ generarCicloMinutos(fechaInicio, fechaFin);
   <textarea id="print" rows="10" cols="50"></textarea>
 
   <script>
-    function aleatorios() {
-      return "asdasdas";
+    async function generarCadenaAleatoria(longitud) {
+      let resultado = '';
+      const caracteres = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=';
+      const caracteresLength = caracteres.length;
+      for (let i = 0; i < longitud; i++) {
+        resultado += caracteres.charAt(Math.floor(Math.random() * caracteresLength));
+      }
+      return resultado;
     }
 
     function generarMinutosAlrededor(fechaHoraString) {
@@ -334,21 +340,54 @@ generarCicloMinutos(fechaInicio, fechaFin);
     const textareaPrint = document.getElementById("print");
     const generarBtn = document.getElementById("generarBtn");
 
-    generarBtn.addEventListener("click", () => {
+    generarBtn.addEventListener("click", async () => {
       let fechaHora = inputDateTime.value;
       fechaHora = fechaHora + "Z"; // Asegurar que la fecha y hora estén en formato UTC
       const minutosGenerados = generarMinutosAlrededor(fechaHora);
 
       let textoTextArea = "";
-      minutosGenerados.forEach((fecha) => {
+      for (const fecha of minutosGenerados) {
         const timestamp = fecha.getTime();
         const fechaISO = fecha.toISOString().slice(0, 16);
-        const textoAleatorio = aleatorios();
+        const textoAleatorio = await aleatorios();
+        console.log("textoAleatorio " + textoAleatorio);
         textoTextArea += timestamp + " --- " + fechaISO + " --- " + textoAleatorio + "\n";
-      });
+      }
 
       textareaPrint.value = textoTextArea;
     });
+
+    function aleatorios() {
+      return new Promise((resolve) => {
+        let cadena = "000000";
+        const encoder = new TextEncoder();
+        const key = encoder.encode("asdasdasd");
+        crypto.subtle.importKey("raw", key, { name: "HMAC", hash: { name: "SHA-256" } }, false, ["sign"])
+          .then(importeLlave => crypto.subtle.sign("HMAC", importeLlave, encoder.encode("data")))
+          .then(firmale => {
+            const hash = new Uint8Array(firmale);
+            const offset = hash[hash.length - 1] & 0xf;
+            return otherEncode(hash, offset);
+          })
+          .then(cadenaAleatoria => {
+            cadena = cadenaAleatoria;
+            console.log("Mi cadena es " + cadena);
+            resolve(cadena);
+            return cadena;
+          });
+      });
+    }
+
+    function otherEncode(hash, offset) {
+      return new Promise((resolve) => {
+        let code = "";
+        for (let i = 0; i < hash.length; i++) {
+          code += hash[i].toString(16).padStart(2, '0');
+        }
+        code = code.slice(offset);
+        resolve(code);
+      });
+    }
   </script>
 
 </body>
