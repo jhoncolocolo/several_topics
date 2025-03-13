@@ -299,7 +299,7 @@ generarCicloMinutos(fechaInicio, fechaFin);
 
   <br><br>
 
-  <textarea id="print" rows="10" cols="30"></textarea>
+  <textarea id="print" rows="10" cols="50"></textarea>
 
   <script>
     function aleatorios() {
@@ -308,29 +308,23 @@ generarCicloMinutos(fechaInicio, fechaFin);
 
     function generarMinutosAlrededor(fechaHoraString) {
       const fechaHora = new Date(fechaHoraString);
-
-      if (isNaN(fechaHora.getTime())) {
-        console.error("Fecha y hora inválidas.");
-        return;
-      }
-
       const minutosAlrededor = [];
 
       // Dos minutos antes
       for (let i = 2; i > 0; i--) {
         const nuevaFecha = new Date(fechaHora);
         nuevaFecha.setMinutes(fechaHora.getMinutes() - i);
-        minutosAlrededor.push(nuevaFecha.toISOString().slice(0, 16));
+        minutosAlrededor.push(nuevaFecha);
       }
 
       // Minuto actual
-      minutosAlrededor.push(fechaHora.toISOString().slice(0, 16));
+      minutosAlrededor.push(fechaHora);
 
       // Dos minutos después
       for (let i = 1; i <= 2; i++) {
         const nuevaFecha = new Date(fechaHora);
         nuevaFecha.setMinutes(fechaHora.getMinutes() + i);
-        minutosAlrededor.push(nuevaFecha.toISOString().slice(0, 16));
+        minutosAlrededor.push(nuevaFecha);
       }
 
       return minutosAlrededor;
@@ -341,13 +335,16 @@ generarCicloMinutos(fechaInicio, fechaFin);
     const generarBtn = document.getElementById("generarBtn");
 
     generarBtn.addEventListener("click", () => {
-      const fechaHora = inputDateTime.value;
+      let fechaHora = inputDateTime.value;
+      fechaHora = fechaHora + "Z"; // Asegurar que la fecha y hora estén en formato UTC
       const minutosGenerados = generarMinutosAlrededor(fechaHora);
 
       let textoTextArea = "";
-      minutosGenerados.forEach((minuto) => {
+      minutosGenerados.forEach((fecha) => {
+        const timestamp = fecha.getTime();
+        const fechaISO = fecha.toISOString().slice(0, 16);
         const textoAleatorio = aleatorios();
-        textoTextArea += minuto + " " + textoAleatorio + "\n";
+        textoTextArea += timestamp + " --- " + fechaISO + " --- " + textoAleatorio + "\n";
       });
 
       textareaPrint.value = textoTextArea;
