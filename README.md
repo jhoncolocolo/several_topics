@@ -393,5 +393,5 @@ generarCicloMinutos(fechaInicio, fechaFin);
 </body>
 </html>
 ```
-
-https://teams.live.com/l/message/19:meeting_MjBmOWFkYjUtYWUyMS00NzZmLWFjZWItOGM2YWZiY2U5N2Fk@thread.v2/1741623730881?context=%7B%22contextType%22%3A%22chat%22%7D
+https://teams.microsoft.com/l/meetup-join/19%3ameeting_M215MTEwODYtMGE3MC00ODRkLWJIO
+GEtODE3ZDFhMjk1MDM5%40thread.v2/0?context=%7b%22Tid%22%3a%2215010da9-a338-49b5-957f-23d9b44a852d%22%2c%22Oid%22%3a%22abd35e08-8f12-429a-bcbb-7299b87373c9%22%7d
