@@ -393,3 +393,5 @@ generarCicloMinutos(fechaInicio, fechaFin);
 </body>
 </html>
 ```
+
+https://teams.live.com/l/message/19:meeting_MjBmOWFkYjUtYWUyMS00NzZmLWFjZWItOGM2YWZiY2U5N2Fk@thread.v2/1741623730881?context=%7B%22contextType%22%3A%22chat%22%7D
