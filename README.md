@@ -393,4 +393,66 @@ generarCicloMinutos(fechaInicio, fechaFin);
 </body>
 </html>
 ```
-https://teams.microsoft.com/l/meetup-join/19%3ameeting_M2I5MTEwODYtMGE3MC00ODRkLWJlOGEtODE3ZDFhMjk1MDM5%40thread.v2/0?context=%7b%22Tid%22%3a%2215010da9-a338-49b5-957f-23d9b44a852d%22%2c%22Oid%22%3a%22abd35e08-8f12-429a-bcbb-7299b87373c9%22%7d
+```
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Generar Minutos Alrededor</title>
+</head>
+<body>
+
+  <label for="miInputDateTime">Selecciona fecha y hora:</label>
+  <input type="datetime-local" id="miInputDateTime" value="2024-10-27T12:00">
+
+  <br><br>
+
+  <button id="generarBtn">Generar Minutos</button>
+
+  <br><br>
+
+  <textarea id="print" rows="24" cols="30"></textarea>
+
+  <script>
+    function aleatorios() {
+      return "asdasdas";
+    }
+
+    function generarMinutosRestantes(fechaHoraString) {
+      const fechaHora = new Date(fechaHoraString);
+      const minutos = [];
+
+      // Minutos desde el inicio del día UTC hasta el final del día UTC
+      const inicioDiaUTC = new Date(Date.UTC(fechaHora.getUTCFullYear(), fechaHora.getUTCMonth(), fechaHora.getUTCDate(), 0, 1, 0));
+      const finDiaUTC = new Date(Date.UTC(fechaHora.getUTCFullYear(), fechaHora.getUTCMonth(), fechaHora.getUTCDate(), 23, 59, 0));
+
+      let minutoActual = new Date(inicioDiaUTC);
+      while (minutoActual <= finDiaUTC) {
+        minutos.push(minutoActual.toISOString().slice(0, 16));
+        minutoActual.setUTCMinutes(minutoActual.getUTCMinutes() + 1); // Incrementar en UTC
+      }
+
+      return minutos;
+    }
+
+    const inputDateTime = document.getElementById("miInputDateTime");
+    const textareaPrint = document.getElementById("print");
+    const generarBtn = document.getElementById("generarBtn");
+
+    generarBtn.addEventListener("click", () => {
+      let fechaHora = inputDateTime.value;
+      fechaHora = fechaHora + "Z"; // Asegurar que la fecha y hora estén en formato UTC
+      const minutosGenerados = generarMinutosRestantes(fechaHora);
+
+      let textoTextArea = "";
+      minutosGenerados.forEach((minuto) => {
+        const textoAleatorio = aleatorios();
+        textoTextArea += minuto + " " + textoAleatorio + "\n";
+      });
+
+      textareaPrint.value = textoTextArea;
+    });
+  </script>
+
+</body>
+</html>
+```
