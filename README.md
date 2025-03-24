@@ -1,8 +1,9 @@
 # several_topics
 ```
+import com.google.gson.Gson;
 import com.google.gson.JsonElement;
-import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -11,46 +12,75 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
 
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Map;
+
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
-public class ProcesadorCredencialesTest {
+public class ValidarTokenRsaTestOriginal {
 
     @Mock
-    private ProcesadorCredenciales procesadorCredencialesMock;
+    private ServicioRespuesta validateRsaPort;
+
+    @Mock
+    private Gson gson;
 
     @InjectMocks
-    private ProcesadorCredenciales procesadorCredenciales;
+    private ValidarTokenRsa validarTokenRsa;
+
+    private Map<String, ValidarEstado> validateRsaMap;
+
+    @BeforeEach
+    public void setUp() {
+        validateRsaMap = new HashMap<>();
+        validateRsaMap.put("SATISFACTORIO", ValidarEstado.SATISFACTORIO);
+        validateRsaMap.put("INVALIDO", ValidarEstado.INVALIDO);
+        validateRsaMap.put("SIGUIENTE", ValidarEstado.SIGUIENTE);
+        validarTokenRsa.initializeValidateRsaMap();
+    }
 
     @Test
-    public void testProcesarCredenciales() {
-        // Configura los datos de entrada
-        Credenciales credenciales = Credenciales.builder()
-                .usuario("testUsuario")
-                .token("testToken")
-                .build();
+    public void testValidateToken_Satisfactorio() {
+        String jsonResponse = "{\"contexto\":\"Validación de credenciales del usuario\",\"resultadosValidacionCredenciales\":[],\"intentoCodigoRespuesta\": \"SATISFACTORIO\",\"razonCodigoRespuesta\": \"OK\",\"metodosRetos\": {\"retos\": []}}";
+        JsonElement jsonElement = JsonParser.parseString(jsonResponse);
+        RespuestaValidacion respuestaValidacion = new Gson().fromJson(jsonElement, RespuestaValidacion.class);
 
-        // Configura los mocks para simular las respuestas de las librerías externas
-        JsonObject remoteRequestJson = new JsonObject();
-        remoteRequestJson.addProperty("token", "testToken");
-        RemoteRequestParam remoteRequestParam = new RemoteRequestParam();
-        remoteRequestParam.setAuthToken("testToken");
+        when(validateRsaPort.validateToken(any())).thenReturn(Mono.just(jsonElement));
+        when(gson.fromJson(any(JsonElement.class), any())).thenReturn(respuestaValidacion);
 
-        when(procesadorCredencialesMock.insertarTokenAutenticacion(any(JsonElement.class)))
-                .thenReturn(Mono.just(remoteRequestParam));
+        StepVerifier.create(validarTokenRsa.validateToken(new Credenciales("user", "token")))
+                .expectNextMatches(result -> result.getStatus() == ValidarEstado.SATISFACTORIO)
+                .verifyComplete();
+    }
 
-        JsonObject dataPowerJson = JsonParser.parseString("{\"contexto\": \"Validación de credenciales del usuario\", \"resultadosValidacionCredenciales\": [{\"metodoRespuesta\": \"Contraseña incorrecta\", \"codigoMetodo\": \"401\", \"razonCodigo\": \"Credenciales inválidas\", \"atributosAutenticacion\": {}}], \"intentoCodigoRespuesta\": \"401\", \"razonCodigoRespuesta\": \"Credenciales inválidas\", \"metodosRetos\": {\"retos\": [{\"metodoId\": \"preguntaSeguridad\", \"metodoRequerido\": true}]}}").getAsJsonObject();
+    @Test
+    public void testValidateToken_Invalido() {
+        String jsonResponse = "{\"contexto\":\"Validación de credenciales del usuario\",\"resultadosValidacionCredenciales\":[],\"intentoCodigoRespuesta\": \"INVALIDO\",\"razonCodigoRespuesta\": \"Credenciales inválidas\",\"metodosRetos\": {\"retos\": []}}";
+        JsonElement jsonElement = JsonParser.parseString(jsonResponse);
+        RespuestaValidacion respuestaValidacion = new Gson().fromJson(jsonElement, RespuestaValidacion.class);
 
-        when(procesadorCredencialesMock.obtenerDatosDatapower(any(RemoteRequestParam.class)))
-                .thenReturn(Mono.just(dataPowerJson));
+        when(validateRsaPort.validateToken(any())).thenReturn(Mono.just(jsonElement));
+        when(gson.fromJson(any(JsonElement.class), any())).thenReturn(respuestaValidacion);
 
-        // Llama al método a probar
-        Mono<JsonElement> resultado = procesadorCredenciales.procesarCredenciales(credenciales);
+        StepVerifier.create(validarTokenRsa.validateToken(new Credenciales("user", "token")))
+                .expectError(DataPowerLoginException.class)
+                .verify();
+    }
 
-        // Verifica el resultado
-        StepVerifier.create(resultado)
-                .expectNextMatches(jsonElement -> jsonElement.getAsJsonObject().equals(dataPowerJson))
+    @Test
+    public void testValidateToken_Siguiente() {
+        String jsonResponse = "{\"contexto\":\"Validación de credenciales del usuario\",\"resultadosValidacionCredenciales\":[],\"intentoCodigoRespuesta\": \"SIGUIENTE\",\"razonCodigoRespuesta\": \"Siguiente paso\",\"metodosRetos\": {\"retos\": []}}";
+        JsonElement jsonElement = JsonParser.parseString(jsonResponse);
+        RespuestaValidacion respuestaValidacion = new Gson().fromJson(jsonElement, RespuestaValidacion.class);
+
+        when(validateRsaPort.validateToken(any())).thenReturn(Mono.just(jsonElement));
+        when(gson.fromJson(any(JsonElement.class), any())).thenReturn(respuestaValidacion);
+
+        StepVerifier.create(validarTokenRsa.validateToken(new Credenciales("user", "token")))
+                .expectNextMatches(result -> result.getStatus() == ValidarEstado.SIGUIENTE)
                 .verifyComplete();
     }
 }
