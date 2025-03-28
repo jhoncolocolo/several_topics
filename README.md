@@ -1,87 +1,72 @@
 # several_topics
 ```
-import com.google.gson.Gson;
-import com.google.gson.JsonElement;
-import com.google.gson.JsonParser;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.InjectMocks;
-import org.mockito.Mock;
-import org.mockito.junit.jupiter.MockitoExtension;
-import reactor.core.publisher.Mono;
-import reactor.test.StepVerifier;
+package my.project.cache.service;
 
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.Map;
-
-import static org.mockito.ArgumentMatchers.any;
+import static org.junit.Assert.assertEquals;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-@ExtendWith(MockitoExtension.class)
-public class ValidarTokenRsaTestOriginal {
+import javax.naming.InitialContext;
+import javax.naming.NamingException;
 
-    @Mock
-    private ServicioRespuesta validateRsaPort;
+import org.junit.Test;
+import org.easymock.EasyMock;
+import org.junit.Assert;
+import org.junit.runner.RunWith;
+import org.powermock.api.easymock.PowerMock;
+import org.powermock.core.classloader.annotations.PrepareForTest;
+import org.powermock.modules.junit4.PowerMockRunner;
 
-    @Mock
-    private Gson gson;
+import com.ibm.websphere.cache.DistributedOBJETOCache;
+import com.ibm.websphere.cache.EntryInfo;
 
-    @InjectMocks
-    private ValidarTokenRsa validarTokenRsa;
+@RunWith(PowerMockRunner.class)
+@PrepareForTest({DistributedCacheService.class})
+public class DistributedCacheServiceTest {
 
-    private Map<String, ValidarEstado> validateRsaMap;
-
-    @BeforeEach
-    public void setUp() {
-        validateRsaMap = new HashMap<>();
-        validateRsaMap.put("SATISFACTORIO", ValidarEstado.SATISFACTORIO);
-        validateRsaMap.put("INVALIDO", ValidarEstado.INVALIDO);
-        validateRsaMap.put("SIGUIENTE", ValidarEstado.SIGUIENTE);
-        validarTokenRsa.initializeValidateRsaMap();
-    }
-
-    @Test
-    public void testValidateToken_Satisfactorio() {
-        String jsonResponse = "{\"contexto\":\"Validación de credenciales del usuario\",\"resultadosValidacionCredenciales\":[],\"intentoCodigoRespuesta\": \"SATISFACTORIO\",\"razonCodigoRespuesta\": \"OK\",\"metodosRetos\": {\"retos\": []}}";
-        JsonElement jsonElement = JsonParser.parseString(jsonResponse);
-        RespuestaValidacion respuestaValidacion = new Gson().fromJson(jsonElement, RespuestaValidacion.class);
-
-        when(validateRsaPort.validateToken(any())).thenReturn(Mono.just(jsonElement));
-        when(gson.fromJson(any(JsonElement.class), any())).thenReturn(respuestaValidacion);
-
-        StepVerifier.create(validarTokenRsa.validateToken(new Credenciales("user", "token")))
-                .expectNextMatches(result -> result.getStatus() == ValidarEstado.SATISFACTORIO)
-                .verifyComplete();
-    }
+    private static final String CACHE_INSTANCE_KEY = "services/cache/validador_cache";
+    private static final String USUARIO = "USUARIO";
+    private static final String OBJETO = "objeto";
 
     @Test
-    public void testValidateToken_Invalido() {
-        String jsonResponse = "{\"contexto\":\"Validación de credenciales del usuario\",\"resultadosValidacionCredenciales\":[],\"intentoCodigoRespuesta\": \"INVALIDO\",\"razonCodigoRespuesta\": \"Credenciales inválidas\",\"metodosRetos\": {\"retos\": []}}";
-        JsonElement jsonElement = JsonParser.parseString(jsonResponse);
-        RespuestaValidacion respuestaValidacion = new Gson().fromJson(jsonElement, RespuestaValidacion.class);
+    public void putAndGetCacheObjectTest() throws Exception {
 
-        when(validateRsaPort.validateToken(any())).thenReturn(Mono.just(jsonElement));
-        when(gson.fromJson(any(JsonElement.class), any())).thenReturn(respuestaValidacion);
+        InitialContext initialContextMock = PowerMock.createMock(InitialContext.class);
+        DistributedOBJETOCache distributedOBJETOCacheMock = EasyMock.createMock(DistributedOBJETOCache.class);
 
-        StepVerifier.create(validarTokenRsa.validateToken(new Credenciales("user", "token")))
-                .expectError(DataPowerLoginException.class)
-                .verify();
-    }
+        PowerMock.expectNew(InitialContext.class).andReturn(initialContextMock);
+        EasyMock.expect(initialContextMock.lookup(CACHE_INSTANCE_KEY)).andReturn(distributedOBJETOCacheMock);
 
-    @Test
-    public void testValidateToken_Siguiente() {
-        String jsonResponse = "{\"contexto\":\"Validación de credenciales del usuario\",\"resultadosValidacionCredenciales\":[],\"intentoCodigoRespuesta\": \"SIGUIENTE\",\"razonCodigoRespuesta\": \"Siguiente paso\",\"metodosRetos\": {\"retos\": []}}";
-        JsonElement jsonElement = JsonParser.parseString(jsonResponse);
-        RespuestaValidacion respuestaValidacion = new Gson().fromJson(jsonElement, RespuestaValidacion.class);
+        // Creamos el objeto UsuarioTransaccion que vamos a poner y obtener
+        UsuarioTransaccion transaccionParaCache = new UsuarioTransaccion(USUARIO, "Detalle de prueba", OBJETO);
 
-        when(validateRsaPort.validateToken(any())).thenReturn(Mono.just(jsonElement));
-        when(gson.fromJson(any(JsonElement.class), any())).thenReturn(respuestaValidacion);
+        // Expectativa para el método put
+        EasyMock.expect(distributedOBJETOCacheMock.put(eq(USUARIO), eq(transaccionParaCache), EasyMock.anyInt(), EasyMock.anyInt(), EasyMock.anyObject(), EasyMock.isNull())).andReturn(false);
 
-        StepVerifier.create(validarTokenRsa.validateToken(new Credenciales("user", "token")))
-                .expectNextMatches(result -> result.getStatus() == ValidarEstado.SIGUIENTE)
-                .verifyComplete();
+        // Expectativa para el método get
+        when(distributedOBJETOCacheMock.get(USUARIO)).thenReturn(transaccionParaCache);
+
+        PowerMock.replay(initialContextMock, InitialContext.class);
+        PowerMock.replay(distributedOBJETOCacheMock, DistributedOBJETOCache.class);
+
+        DistributedCacheService distributedCacheService = new DistributedCacheService();
+
+        // Llamamos al método para poner el objeto en la caché
+        distributedCacheService.putCacheObject(CACHE_INSTANCE_KEY, USUARIO, transaccionParaCache);
+
+        // Llamamos al método para obtener el objeto de la caché
+        UsuarioTransaccion transaccionRecuperada = (UsuarioTransaccion) distributedCacheService.getCacheObjectByKey(CACHE_INSTANCE_KEY, USUARIO);
+
+        // Verificamos que el método put fue llamado con los argumentos esperados
+        EasyMock.verify(distributedOBJETOCacheMock, times(1)).put(eq(USUARIO), eq(transaccionParaCache), EasyMock.anyInt(), EasyMock.anyInt(), EasyMock.anyObject(), EasyMock.isNull());
+
+        // Verificamos que el método get fue llamado con la clave correcta
+        verify(distributedOBJETOCacheMock, times(1)).get(eq(USUARIO));
+
+        // Verificamos que el objeto recuperado es igual al objeto que se puso
+        assertEquals(transaccionParaCache, transaccionRecuperada);
     }
 }
 ```
