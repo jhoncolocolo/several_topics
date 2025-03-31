@@ -81,6 +81,53 @@ public class DistributedCacheServiceTest {
 }
 
 
+
+package my.project.cache.service;
+
+import static org.junit.Assert.*;
+import com.ibm.websphere.cache.DistributedObjectCache;
+import org.junit.Before;
+import org.junit.Test;
+import java.lang.reflect.Method;
+import java.lang.reflect.Field;
+import java.util.Map;
+
+public class DistributedCacheServiceTest {
+    private DistributedCacheService cacheService;
+    private DistributedObjectCache fakeCache;
+
+    @Before
+    public void setUp() throws Exception {
+        cacheService = new DistributedCacheService(); 
+        fakeCache = new FakeDistributedObjectCache();
+
+        // Usamos Reflection para reemplazar `getCache`
+        Field method = DistributedCacheService.class.getDeclaredField("getCache");
+        method.setAccessible(true);
+        method.set(cacheService, (String cacheInstance) -> fakeCache);
+    }
+
+    @Test
+    public void testPutAndGetCacheObject() throws Exception {
+        UsuarioTransaccion user = new UsuarioTransaccion("Juan", "Compra", 100);
+        cacheService.putCacheObject("testCache", "user1", user);
+
+        Object retrieved = cacheService.getCacheObjectByKey("testCache", "user1");
+        assertEquals(user, retrieved);
+    }
+
+    @Test
+    public void testRemoveCacheObject() throws Exception {
+        UsuarioTransaccion user = new UsuarioTransaccion("Maria", "Venta", 200);
+        cacheService.putCacheObject("testCache", "user2", user);
+        cacheService.removeCacheObjectByKey("testCache", "user2");
+
+        Object retrieved = cacheService.getCacheObjectByKey("testCache", "user2");
+        assertNull(retrieved);
+    }
+}
+
+
 ```
 
 
