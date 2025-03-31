@@ -52,6 +52,74 @@ public class DistributedCacheServiceTest {
     }
 }
 
+
+import com.ibm.websphere.cache.DistributedObjectCache;
+import my.project.cache.service.DistributedCacheService;
+import my.project.cache.service.UsuarioTransaccion;
+import org.junit.Before;
+import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.mockito.Matchers;
+import org.powermock.api.mockito.PowerMockito;
+import org.powermock.core.classloader.annotations.PrepareForTest;
+import org.powermock.modules.junit4.PowerMockRunner;
+
+import javax.naming.InitialContext;
+import javax.naming.NamingException;
+
+import static org.junit.Assert.assertEquals;
+import static org.mockito.Mockito.*;
+
+@RunWith(PowerMockRunner.class)
+@PrepareForTest({DistributedCacheService.class, InitialContext.class})
+public class DistributedCacheServiceTest {
+
+    private DistributedCacheService cacheService;
+    private DistributedObjectCache mockCache;
+
+    @Before
+    public void setUp() throws Exception {
+        PowerMockito.mockStatic(InitialContext.class);
+
+        // Simular contexto JNDI
+        InitialContext mockContext = PowerMockito.mock(InitialContext.class);
+        PowerMockito.whenNew(InitialContext.class).withNoArguments().thenReturn(mockContext);
+
+        // Simular objeto de caché
+        mockCache = PowerMockito.mock(DistributedObjectCache.class);
+        when(mockContext.lookup(Matchers.<String>any())).thenReturn(mockCache);
+
+        cacheService = new DistributedCacheService();
+    }
+
+    @Test
+    public void testPutCacheObject() throws NamingException {
+        UsuarioTransaccion usuario = new UsuarioTransaccion("Juan", "Compra", 100);
+
+        cacheService.putCacheObject("myCache", "user123", usuario);
+
+        verify(mockCache, times(1)).put(eq("user123"), eq(usuario), anyInt(), anyInt(), anyInt(), isNull());
+    }
+
+    @Test
+    public void testGetCacheObjectByKey() throws NamingException {
+        UsuarioTransaccion usuario = new UsuarioTransaccion("Juan", "Compra", 100);
+        when(mockCache.get("user123")).thenReturn(usuario);
+
+        Object result = cacheService.getCacheObjectByKey("myCache", "user123");
+
+        assertEquals(usuario, result);
+    }
+
+    @Test
+    public void testRemoveCacheObjectByKey() throws NamingException {
+        cacheService.removeCacheObjectByKey("myCache", "user123");
+
+        verify(mockCache, times(1)).remove("user123");
+    }
+}
+
+
 ```
 
 
