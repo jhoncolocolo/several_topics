@@ -1,5 +1,7 @@
 # several_topics
 ```
+  package my.project.cache.service;
+
 import com.ibm.websphere.cache.DistributedObjectCache;
 import java.util.HashMap;
 import java.util.Map;
@@ -12,86 +14,69 @@ public class FakeDistributedObjectCache extends DistributedObjectCache {
         return TYPE_DISTRIBUTED_MAP;
     }
 
+    @Override
     public Object get(Object key) {
         return cache.get(key);
     }
 
-    public void put(Object key, Object value) {
-        cache.put(key, value);
+    @Override
+    public Object put(Object key, Object value) {
+        return cache.put(key, value);
     }
 
-    public void remove(Object key) {
-        cache.remove(key);
+    @Override
+    public Object remove(Object key) {
+        return cache.remove(key);
     }
 
+    @Override
     public boolean containsKey(Object key) {
         return cache.containsKey(key);
     }
 
+    @Override
     public int size() {
         return cache.size();
     }
 }
 
 
-import org.junit.Before;
-import org.junit.After;
-import org.junit.Test;
+
+package my.project.cache.service;
+
 import static org.junit.Assert.*;
 
-public class FakeDistributedObjectCacheTest {
+import com.ibm.websphere.cache.DistributedObjectCache;
+import org.junit.Before;
+import org.junit.Test;
 
-    private FakeDistributedObjectCache cache;
+public class DistributedCacheServiceTest {
+    private DistributedCacheService cacheService;
+    private DistributedObjectCache fakeCache;
 
     @Before
     public void setUp() {
-        cache = new FakeDistributedObjectCache();
-    }
-
-    @After
-    public void tearDown() {
-        cache = null;
+        fakeCache = new FakeDistributedObjectCache(); // Usa la versión de prueba
+        cacheService = new DistributedCacheService(fakeCache);
     }
 
     @Test
-    public void testPutAndGet() {
-        cache.put("key1", "value1");
-        assertEquals("value1", cache.get("key1"));
+    public void testPutAndGetCacheObject() {
+        UsuarioTransaccion user = new UsuarioTransaccion("Juan", "Compra", 100);
+        cacheService.putCacheObject("user1", user);
+
+        Object retrieved = cacheService.getCacheObjectByKey("user1");
+        assertEquals(user, retrieved);
     }
 
     @Test
-    public void testGetNonExistentKey() {
-        assertNull(cache.get("nonExistentKey"));
-    }
+    public void testRemoveCacheObject() {
+        UsuarioTransaccion user = new UsuarioTransaccion("Maria", "Venta", 200);
+        cacheService.putCacheObject("user2", user);
+        cacheService.removeCacheObjectByKey("user2");
 
-    @Test
-    public void testRemove() {
-        cache.put("key1", "value1");
-        cache.remove("key1");
-        assertNull(cache.get("key1"));
-    }
-
-    @Test
-    public void testContainsKey() {
-        cache.put("key1", "value1");
-        assertTrue(cache.containsKey("key1"));
-        cache.remove("key1");
-        assertFalse(cache.containsKey("key1"));
-    }
-
-    @Test
-    public void testSize() {
-        assertEquals(0, cache.size());
-        cache.put("key1", "value1");
-        cache.put("key2", "value2");
-        assertEquals(2, cache.size());
-        cache.remove("key1");
-        assertEquals(1, cache.size());
-    }
-
-    @Test
-    public void testGetMapType() {
-        assertEquals(DistributedObjectCache.TYPE_DISTRIBUTED_MAP, cache.getMapType());
+        Object retrieved = cacheService.getCacheObjectByKey("user2");
+        assertNull(retrieved);
     }
 }
 
