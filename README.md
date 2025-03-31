@@ -1,61 +1,8 @@
 # several_topics
 ```
-  package my.project.cache.service;
-
-import static org.junit.Assert.*;
-import static org.powermock.api.mockito.PowerMockito.*;
-
-import com.ibm.websphere.cache.DistributedObjectCache;
-import org.junit.Before;
-import org.junit.Test;
-import org.junit.runner.RunWith;
-import org.mockito.Mock;
-import org.powermock.core.classloader.annotations.PrepareForTest;
-import org.powermock.modules.junit4.PowerMockRunner;
-
-import javax.naming.NamingException;
-
-@RunWith(PowerMockRunner.class)
-@PrepareForTest(DistributedCacheService.class)
-public class DistributedCacheServiceTest {
-    private DistributedCacheService cacheService;
-
-    @Mock
-    private DistributedObjectCache fakeCache;
-
-    @Before
-    public void setUp() throws Exception {
-        cacheService = spy(new DistributedCacheService()); // Espiamos la clase real
-        fakeCache = new FakeDistributedObjectCache(); // Instancia del cache fake
-
-        // Mockeamos el método privado getCache para que devuelva fakeCache
-        when(cacheService, "getCache", anyString()).thenReturn(fakeCache);
-    }
-
-    @Test
-    public void testPutAndGetCacheObject() throws NamingException {
-        UsuarioTransaccion user = new UsuarioTransaccion("Juan", "Compra", 100);
-        cacheService.putCacheObject("testCache", "user1", user);
-
-        Object retrieved = cacheService.getCacheObjectByKey("testCache", "user1");
-        assertEquals(user, retrieved);
-    }
-
-    @Test
-    public void testRemoveCacheObject() throws NamingException {
-        UsuarioTransaccion user = new UsuarioTransaccion("Maria", "Venta", 200);
-        cacheService.putCacheObject("testCache", "user2", user);
-        cacheService.removeCacheObjectByKey("testCache", "user2");
-
-        Object retrieved = cacheService.getCacheObjectByKey("testCache", "user2");
-        assertNull(retrieved);
-    }
-}
-
-
-import com.ibm.websphere.cache.DistributedObjectCache;
-import my.project.cache.service.DistributedCacheService;
-import my.project.cache.service.UsuarioTransaccion;
+import my.project.cache.service.ValidadorServicioDeValidadorCache;
+import my.project.model.SeguridadEntrasRequisitosDeSeguridadEnTransferencias;
+import my.project.model.ValidadorDeParametrosDeCache;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -64,88 +11,105 @@ import org.powermock.api.mockito.PowerMockito;
 import org.powermock.core.classloader.annotations.PrepareForTest;
 import org.powermock.modules.junit4.PowerMockRunner;
 
-import javax.naming.InitialContext;
 import javax.naming.NamingException;
+import java.util.HashMap;
 
 import static org.junit.Assert.assertEquals;
 import static org.mockito.Mockito.*;
 
 @RunWith(PowerMockRunner.class)
-@PrepareForTest({DistributedCacheService.class, InitialContext.class})
-public class DistributedCacheServiceTest {
+@PrepareForTest({ValidadorServicioDeValidadorCache.class, LoggerCustomHelper.class})
+public class ValidadorServicioDeValidadorCacheTest {
 
-    private DistributedCacheService cacheService;
-    private DistributedObjectCache mockCache;
+    private ValidadorServicioDeValidadorCache validadorCacheService;
 
     @Before
     public void setUp() throws Exception {
-        PowerMockito.mockStatic(InitialContext.class);
+        // Mockear la clase LoggerCustomHelper
+        PowerMockito.mockStatic(LoggerCustomHelper.class);
+        PowerMockito.doNothing().when(LoggerCustomHelper.class, "logInfo", any(String.class), any(String.class), any(HashMap.class));
 
-        // Simular contexto JNDI
-        InitialContext mockContext = PowerMockito.mock(InitialContext.class);
-        PowerMockito.whenNew(InitialContext.class).withNoArguments().thenReturn(mockContext);
+        // Instanciar la clase que extiende de DistributedCacheService
+        validadorCacheService = PowerMockito.spy(new ValidadorServicioDeValidadorCache());
 
-        // Simular objeto de caché
-        mockCache = PowerMockito.mock(DistributedObjectCache.class);
-        when(mockContext.lookup(Matchers.<String>any())).thenReturn(mockCache);
+        // Mockear el método putCacheObject para simular el almacenamiento en caché
+        doNothing().when(validadorCacheService).putCacheObject(anyString(), anyString(), anyString());
 
-        cacheService = new DistributedCacheService();
+        // Mockear el método getCacheObjectByKey para devolver el objeto guardado
+        doAnswer(invocation -> {
+            String key = invocation.getArgument(1);
+            return "testKey".equals(key) ? "{ \"session\": \"testSession\", \"pais\": \"CO\" }" : null;
+        }).when(validadorCacheService).getCacheObjectByKey(anyString(), anyString());
     }
 
     @Test
-    public void testPutCacheObject() throws NamingException {
-        UsuarioTransaccion usuario = new UsuarioTransaccion("Juan", "Compra", 100);
+    public void testPonerValidadorDeCache_CasoExitoso() throws NamingException {
+        // Crear datos de prueba
+        SeguridadEntrasRequisitosDeSeguridadEnTransferencias seguridadInfo = new SeguridadEntrasRequisitosDeSeguridadEnTransferencias();
+        ValidadorDeParametrosDeCache validadorInfo = new ValidadorDeParametrosDeCache();
+        validadorInfo.setLlave("testKey");
+        validadorInfo.setSesionID("testSession");
+        validadorInfo.setPais("CO"); // País válido para almacenamiento en caché
+        validadorInfo.setNeedCara(false); // Se activará por país
 
-        cacheService.putCacheObject("myCache", "user123", usuario);
+        // Ejecutar el método a probar
+        validadorCacheService.ponerValidadorDeCache(seguridadInfo, validadorInfo);
 
-        verify(mockCache, times(1)).put(eq("user123"), eq(usuario), anyInt(), anyInt(), anyInt(), isNull());
+        // Verificar que se llamó a putCacheObject con los parámetros correctos
+        verify(validadorCacheService, times(1)).putCacheObject(eq("servicios/cache/validador_cache"), eq("testKey"), anyString());
+
+        // Recuperar el objeto de la caché
+        Object result = validadorCacheService.getCacheObjectByKey("servicios/cache/validador_cache", "testKey");
+
+        // Verificar que el objeto insertado es el mismo que se recuperó
+        assertEquals("{ \"session\": \"testSession\", \"pais\": \"CO\" }", result);
+
+        // Verificar que se llamó al log correctamente
+        PowerMockito.verifyStatic(LoggerCustomHelper.class, times(1));
+        LoggerCustomHelper.logInfo(eq("Mis_logs"), anyString(), any(HashMap.class));
     }
 
     @Test
-    public void testGetCacheObjectByKey() throws NamingException {
-        UsuarioTransaccion usuario = new UsuarioTransaccion("Juan", "Compra", 100);
-        when(mockCache.get("user123")).thenReturn(usuario);
+    public void testPonerValidadorDeCache_NoGuardaEnCache() throws NamingException {
+        // Crear datos de prueba donde NO debería guardarse en caché
+        SeguridadEntrasRequisitosDeSeguridadEnTransferencias seguridadInfo = new SeguridadEntrasRequisitosDeSeguridadEnTransferencias();
+        ValidadorDeParametrosDeCache validadorInfo = new ValidadorDeParametrosDeCache();
+        validadorInfo.setLlave("testKey");
+        validadorInfo.setSesionID("testSession");
+        validadorInfo.setPais("US"); // País diferente a "CO"
+        validadorInfo.setNeedCara(false); // No cumple ninguna condición
 
-        Object result = cacheService.getCacheObjectByKey("myCache", "user123");
+        // Ejecutar el método a probar
+        validadorCacheService.ponerValidadorDeCache(seguridadInfo, validadorInfo);
 
-        assertEquals(usuario, result);
+        // Verificar que NO se llamó a putCacheObject
+        verify(validadorCacheService, never()).putCacheObject(anyString(), anyString(), anyString());
+
+        // Verificar que NO se llamó al log
+        PowerMockito.verifyStatic(LoggerCustomHelper.class, never());
+        LoggerCustomHelper.logInfo(anyString(), anyString(), any(HashMap.class));
     }
 
     @Test
-    public void testRemoveCacheObjectByKey() throws NamingException {
-        cacheService.removeCacheObjectByKey("myCache", "user123");
+    public void testPonerValidadorDeCache_ManejoDeExcepcion() throws NamingException {
+        // Crear datos de prueba
+        SeguridadEntrasRequisitosDeSeguridadEnTransferencias seguridadInfo = new SeguridadEntrasRequisitosDeSeguridadEnTransferencias();
+        ValidadorDeParametrosDeCache validadorInfo = new ValidadorDeParametrosDeCache();
+        validadorInfo.setLlave("testKey");
+        validadorInfo.setSesionID("testSession");
+        validadorInfo.setPais("CO");
 
-        verify(mockCache, times(1)).remove("user123");
+        // Simular que putCacheObject lanza una excepción
+        doThrow(new NamingException("Error de cache")).when(validadorCacheService).putCacheObject(anyString(), anyString(), anyString());
+
+        // Ejecutar el método
+        validadorCacheService.ponerValidadorDeCache(seguridadInfo, validadorInfo);
+
+        // Verificar que el error se registró en el log
+        PowerMockito.verifyStatic(LoggerCustomHelper.class, times(1));
+        LoggerCustomHelper.logInfo(eq("Mis_logs"), contains("Error de cache"), any(HashMap.class));
     }
-
-@Test
-public void testPutAndGetCacheObject() throws NamingException {
-    UsuarioTransaccion usuario = new UsuarioTransaccion("Juan", "Compra", 100);
-
-    // Simular que cuando se llama a get() devuelve el mismo objeto
-    doAnswer(invocation -> {
-        Object key = invocation.getArgument(0);
-        return "user123".equals(key) ? usuario : null;
-    }).when(mockCache).get(anyString());
-
-    // Agregar el objeto a la caché
-    cacheService.putCacheObject("myCache", "user123", usuario);
-
-    // Recuperar el objeto
-    Object result = cacheService.getCacheObjectByKey("myCache", "user123");
-
-    // Verificar que el objeto insertado es el mismo que se recuperó
-    assertEquals(usuario, result);
-
-    // Verificar que se llamó a put con los parámetros correctos
-    verify(mockCache, times(1)).put(eq("user123"), eq(usuario), eq(1), eq(660), eq(4), any(Object[].class));
-
-    // Verificar que se llamó a get con la clave correcta
-    verify(mockCache, times(1)).get(eq("user123"));
 }
-
-}
-
 
 ```
 
