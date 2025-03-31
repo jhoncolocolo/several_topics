@@ -117,6 +117,33 @@ public class DistributedCacheServiceTest {
 
         verify(mockCache, times(1)).remove("user123");
     }
+
+@Test
+public void testPutAndGetCacheObject() throws NamingException {
+    UsuarioTransaccion usuario = new UsuarioTransaccion("Juan", "Compra", 100);
+
+    // Simular que cuando se llama a get() devuelve el mismo objeto
+    doAnswer(invocation -> {
+        Object key = invocation.getArgument(0);
+        return "user123".equals(key) ? usuario : null;
+    }).when(mockCache).get(anyString());
+
+    // Agregar el objeto a la caché
+    cacheService.putCacheObject("myCache", "user123", usuario);
+
+    // Recuperar el objeto
+    Object result = cacheService.getCacheObjectByKey("myCache", "user123");
+
+    // Verificar que el objeto insertado es el mismo que se recuperó
+    assertEquals(usuario, result);
+
+    // Verificar que se llamó a put con los parámetros correctos
+    verify(mockCache, times(1)).put(eq("user123"), eq(usuario), eq(1), eq(660), eq(4), any(Object[].class));
+
+    // Verificar que se llamó a get con la clave correcta
+    verify(mockCache, times(1)).get(eq("user123"));
+}
+
 }
 
 
