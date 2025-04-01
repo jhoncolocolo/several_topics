@@ -110,6 +110,79 @@ public class ValidadorServicioDeValidadorCacheTest {
         LoggerCustomHelper.logInfo(eq("Mis_logs"), contains("Error de cache"), any(HashMap.class));
     }
 }
+--------------------------------------------------------------------------------------------------
+
+import com.ibm.websphere.cache.DistributedObjectCache;
+import my.project.cache.service.ValidadorServicioDeValidadorCache;
+import my.project.cache.service.SeguridadEntrasRequisitosDeSeguridadEnTransferencias;
+import my.project.cache.service.ValidadorDeParametrosDeCache;
+import org.junit.Before;
+import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.mockito.Matchers;
+import org.powermock.api.mockito.PowerMockito;
+import org.powermock.core.classloader.annotations.PrepareForTest;
+import org.powermock.modules.junit4.PowerMockRunner;
+
+import javax.naming.InitialContext;
+import javax.naming.NamingException;
+
+import static org.junit.Assert.assertEquals;
+import static org.mockito.Mockito.*;
+
+/**
+ * Prueba para ValidadorServicioDeValidadorCache con JUnit 4 y PowerMock.
+ */
+@RunWith(PowerMockRunner.class)
+@PrepareForTest({ValidadorServicioDeValidadorCache.class, InitialContext.class})
+public class ValidadorServicioDeValidadorCacheTest {
+
+    private ValidadorServicioDeValidadorCache validadorCacheService;
+    private DistributedObjectCache mockCache;
+
+    @Before
+    public void setUp() throws Exception {
+        PowerMockito.mockStatic(InitialContext.class);
+
+        // Simular contexto JNDI
+        InitialContext mockContext = PowerMockito.mock(InitialContext.class);
+        PowerMockito.whenNew(InitialContext.class).withNoArguments().thenReturn(mockContext);
+
+        // Simular objeto de caché
+        mockCache = PowerMockito.mock(DistributedObjectCache.class);
+        when(mockContext.lookup(Matchers.<String>any())).thenReturn(mockCache);
+
+        // Usar spy para permitir la ejecución real de métodos
+        validadorCacheService = PowerMockito.spy(new ValidadorServicioDeValidadorCache());
+    }
+
+    @Test
+    public void testPonerValidadorDeCache_CasoExitoso() throws NamingException {
+        // Crear datos de prueba
+        SeguridadEntrasRequisitosDeSeguridadEnTransferencias seguridadInfo = new SeguridadEntrasRequisitosDeSeguridadEnTransferencias();
+        ValidadorDeParametrosDeCache validadorInfo = new ValidadorDeParametrosDeCache();
+        validadorInfo.setLlave("testKey");
+        validadorInfo.setSesionID("testSession");
+        validadorInfo.setPais("CO"); // País válido para almacenamiento en caché
+        validadorInfo.setNeedCara(false); // Se activará por país
+
+        // Ejecutar el método real
+        validadorCacheService.ponerValidadorDeCache(seguridadInfo, validadorInfo);
+
+        // Verificar que se llamó a putCacheObject con los parámetros correctos
+        PowerMockito.verifyPrivate(validadorCacheService, times(1))
+                .invoke("putCacheObject", eq("servicios/cache/validador_cache"), eq("testKey"), anyString());
+
+        // Simular la recuperación del objeto de la caché
+        when(mockCache.get("testKey")).thenReturn("{ \"session\": \"testSession\", \"pais\": \"CO\" }");
+
+        // Recuperar el objeto
+        Object result = validadorCacheService.getCacheObjectByKey("servicios/cache/validador_cache", "testKey");
+
+        // Verificar que el objeto insertado es el mismo que se recuperó
+        assertEquals("{ \"session\": \"testSession\", \"pais\": \"CO\" }", result);
+    }
+}
 
 ```
 
