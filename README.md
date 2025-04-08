@@ -1,186 +1,52 @@
 # several_topics
 
-¡Entendido! Vamos a actualizar la presentación para incluir AWS AppConfig como la solución dedicada para Feature Flags y a profundizar en las razones por las que las variables de entorno no son recomendables para la gestión a largo plazo.
-
-Aquí está la estructura actualizada de la presentación:
-
-Título de la Presentación: Optimizando el Almacenamiento de Feature Flags: Una Comparativa de Soluciones Eficientes y Económicas
-
-Diapositiva 1: Introducción
-
-Título: Almacenamiento Eficiente de Feature Flags
-Punto Clave: Los Feature Flags son cruciales para la agilidad y el control de nuestras aplicaciones, permitiendo habilitar/deshabilitar funcionalidades sin necesidad de rediseployar.
-Objetivo de la Presentación: Evaluar las opciones más económicas y con mejores características para almacenar y gestionar estos parámetros de configuración de consulta frecuente, incluyendo la solución dedicada de AWS.
-Diapositiva 2: ¿Qué Buscamos? Criterios de Evaluación
-
-Título: Criterios Clave para la Selección
-Puntos Clave: Al evaluar las opciones, consideraremos los siguientes aspectos:
-Costo: Priorizando las opciones dentro del nivel gratuito de AWS o con costos mínimos, pero también considerando el valor a largo plazo.
-Funcionalidad Específica para Flags: Características dedicadas para la gestión de feature flags (validación, despliegues controlados, etc.).
-Facilidad de Uso y Gestión: Qué tan sencillo es configurar, actualizar y consultar los flags.
-Seguridad: Cómo se protegen los datos de configuración.
-Escalabilidad: Capacidad de manejar un número creciente de flags y consultas.
-Integración: Facilidad de integración con nuestra infraestructura actual.
-Diapositiva 3: Opción Dedicada y Robusta (AWS AppConfig)
-
-Título: AWS AppConfig
-Descripción: Un servicio de AWS diseñado específicamente para gestionar la configuración de aplicaciones de forma dinámica, incluyendo feature flags.
-Ventajas:
-Funcionalidad Completa para Feature Flags: Ofrece validación de esquemas, despliegues controlados (canary, gradual), rollback automático, monitorización e integraciones con otros servicios de AWS.
-Gestión Centralizada: Interfaz intuitiva para crear, actualizar y gestionar flags.
-Escalabilidad y Rendimiento: Diseñado para manejar un gran número de configuraciones y consultas de alta frecuencia con baja latencia.
-Seguridad y Auditoría: Integración con IAM y AWS CloudTrail para control de acceso y seguimiento de cambios.
-Desventajas:
-Costo: Generalmente más costoso que las alternativas más básicas, especialmente a medida que aumenta el uso (consultas, configuraciones, despliegues). Aunque tiene un nivel gratuito limitado, puede no ser suficiente para un uso intensivo.
-Mayor Complejidad Inicial: La configuración inicial y el aprendizaje de todas sus funcionalidades pueden requerir más tiempo.
-Consideraciones: Si la gestión de feature flags se vuelve crítica y se necesitan funcionalidades avanzadas, AWS AppConfig es la solución recomendada a largo plazo a pesar de su costo.
-Diapositiva 4: Opción Principal y Recomendada (Económica y Funcional para Empezar)
-
-Título: AWS Systems Manager Parameter Store (Capa Estándar)
-Descripción: Un servicio de AWS que permite almacenar y recuperar parámetros de configuración como pares clave-valor. Adecuado para almacenar flags simples de habilitación/deshabilitación.
-Ventajas:
-Costo: La capa estándar es gratuita, lo que la convierte en la opción más atractiva en términos de costo inicial.
-Simplicidad: Fácil de configurar y usar a través de la consola de AWS CLI o SDKs.
-Seguridad: Integración con IAM para controlar el acceso a los parámetros.
-Escalabilidad: Puede manejar un número considerable de parámetros y consultas dentro de los límites de la capa estándar.
-Desventajas:
-Funcionalidad Limitada para Flags: No ofrece las características avanzadas de AppConfig (validación, despliegues controlados, etc.).
-Gestión Manual: La gestión de versiones y la organización de flags puede requerir más esfuerzo manual.
-Menos Integraciones Específicas: No está diseñado específicamente para "feature flags", por lo que las integraciones pueden ser menos directas.
-Recomendación: Para un inicio económico y funcional, especialmente si los requerimientos de gestión de flags no son extremadamente complejos, Parameter Store (capa estándar) es una excelente opción.
-Diapositiva 5: Opción Alternativa (Costo Bajo para Casos de Uso Específicos)
-
-Título: Amazon S3
-Descripción: Servicio de almacenamiento de objetos altamente escalable y disponible. Podemos almacenar un archivo de configuración (JSON, YAML) con nuestros flags.
-Ventajas:
-Costo: El almacenamiento y las lecturas tienen un costo bajo y pueden estar dentro del nivel gratuito para un uso moderado.
-Flexibilidad: Permite estructurar la configuración de flags de la manera que mejor se adapte a la aplicación.
-Durabilidad y Disponibilidad: S3 ofrece alta durabilidad y disponibilidad de los datos.
-Desventajas:
-Implementación Compleja: Requiere que la aplicación implemente la lógica para leer, parsear y posiblemente cachear el archivo de configuración.
-Sin Gestión Integrada: No tiene gestión de versiones o actualizaciones en tiempo real integradas. Los cambios requieren actualizar el archivo.
-Menor Rendimiento para Consultas Frecuentes: Aunque las lecturas son baratas, para consultas muy frecuentes podría generar un costo mayor que Parameter Store.
-Consideraciones: Podría ser una opción viable si la frecuencia de consulta no es extremadamente alta y se necesita más flexibilidad en la estructura de los flags.
-Diapositiva 6: Opción Alternativa (Enfocada en Secretos, Uso Limitado para Flags)
-
-Título: AWS Secrets Manager
-Descripción: Servicio diseñado para almacenar secretos, pero puede utilizarse para almacenar pequeñas configuraciones o flags como cadenas JSON.
-Ventajas:
-Costo: Tiene un nivel gratuito para un número limitado de secretos y accesos por mes. Podría ser gratuito para un número muy pequeño de flags con baja frecuencia de consulta.
-Seguridad: Encriptación robusta y rotación automática de secretos.
-Desventajas:
-Diseñado para Secretos: La gestión de configuraciones puede ser menos intuitiva que con Parameter Store.
-Límites del Nivel Gratuito: El nivel gratuito puede ser restrictivo si se tienen muchos flags o se consultan con frecuencia.
-Mayor Complejidad: Puede ser más complejo de configurar para el simple almacenamiento de flags en comparación con Parameter Store.
-Consideraciones: No es la opción más natural para "feature flags", pero podría considerarse si la seguridad es una preocupación primordial para ciertos flags sensibles y el volumen es bajo.
-Diapositiva 7: Opción a Evitar (Para Gestión de Flags a Largo Plazo) - Explicación Detallada
-
-Título: Variables de Entorno: No Recomendado para Gestión de Flags a Largo Plazo
-Explicación:
-¿Qué son las Variables de Entorno? Son valores dinámicos que pueden afectar la forma en que se ejecutarán los procesos en una computadora o sistema operativo. En el contexto de aplicaciones, se utilizan a menudo para configurar parámetros al inicio de la ejecución de un proceso (por ejemplo, al desplegar una aplicación en un servidor, contenedor o función serverless).
-Problemas para la Gestión de Feature Flags a Largo Plazo:
-Falta de Dinamismo: La principal desventaja es que cambiar una variable de entorno generalmente requiere reiniciar o redeployar la aplicación. Esto va directamente en contra del principio fundamental de los feature flags, que es la capacidad de cambiar el comportamiento de la aplicación en tiempo real sin interrupciones.
-Gestión Centralizada Nula: Las variables de entorno suelen configurarse a nivel de la instancia (servidor, contenedor, función). No hay una forma centralizada y fácil de gestionar y auditar los flags en múltiples instancias o en un entorno distribuido. Esto dificulta el seguimiento de qué flags están activos en qué entornos.
-Dificultad para Cambios Controlados: Implementar estrategias de despliegue gradual (canary releases, blue/green deployments) basadas en variables de entorno es muy complejo y propenso a errores.
-Seguridad Limitada: La gestión de la seguridad y el control de acceso a las variables de entorno pueden ser menos robustos en comparación con servicios dedicados como Parameter Store o Secrets Manager.
-Escalabilidad Compleja: A medida que la aplicación escala, la gestión de variables de entorno en múltiples instancias se vuelve cada vez más difícil y propensa a inconsistencias.
-Auditoría y Rollback: No hay un historial integrado de cambios en las variables de entorno, lo que dificulta la auditoría y el rollback a configuraciones anteriores.
-Conclusión: Si bien las variables de entorno pueden ser útiles para configuraciones estáticas o que cambian con poca frecuencia, no son una solución adecuada para la gestión dinámica y a largo plazo de feature flags. Su falta de dinamismo y gestión centralizada las hacen ineficientes y riesgosas para este caso de uso.
-Diapositiva 8: Comparativa Resumida (Actualizada)
-
-Característica	AWS AppConfig	AWS Systems Manager Parameter Store (Estándar)	Amazon S3	AWS Secrets Manager	Variables de Entorno
-Costo	Moderado a Alto	Gratuito (Capa Estándar)	Bajo (Nivel Gratuito Potencial)	Nivel Gratuito Limitado	Gratuito (Implícito)
-Funcionalidad Flags	Alta (Dedicada)	Básica (Pares Clave-Valor)	Flexible (Estructura de Archivo)	Básica (Cadenas JSON)	Muy Básica
-Facilidad de Uso	Media a Alta	Alta	Media	Media	Baja
-Gestión	Centralizada y Avanzada	Manual (Limitada)	Manual (Sin Gestión Integrada)	Enfocada en Secretos	Difícil a Escala
-Seguridad	IAM Integrado, Auditoría	IAM Integrado	IAM Integrado	Encriptación Robusta	Limitada
-Escalabilidad	Alta	Buena (Dentro de Límites Gratuitos)	Alta	Limitada por Nivel Gratuito	Baja
-Recomendación Inicial	Ideal a Largo Plazo (si es crítico)	Sí (Para empezar)	Condicional (Baja Frecuencia)	No Ideal para Flags Generales	No Recomendado a Largo Plazo
-
-Exportar a Hojas de cálculo
-Diapositiva 9: Conclusiones y Próximos Pasos (Actualizada)
-
-Título: Conclusiones y Recomendaciones
-Puntos Clave:
-AWS AppConfig es la solución dedicada y más robusta para la gestión de feature flags, ofreciendo funcionalidades avanzadas para un control preciso y seguro. Sin embargo, su costo puede ser mayor.
-AWS Systems Manager Parameter Store (Capa Estándar) se presenta como la opción más económica y con buenas características para comenzar, especialmente si los requerimientos iniciales no son complejos.
-Amazon S3 puede ser una alternativa para casos específicos con baja frecuencia de consulta y necesidad de estructuras de configuración flexibles.
-AWS Secrets Manager no es la opción ideal para la gestión general de feature flags.
-Las variables de entorno deben evitarse para la gestión dinámica y a largo plazo de feature flags.
-Próximos Pasos:
-Evaluar la criticidad de la gestión de feature flags y el presupuesto disponible.
-Realizar una prueba de concepto con AWS Systems Manager Parameter Store para validar su adecuación inicial.
-Investigar más a fondo AWS AppConfig si se anticipan necesidades de gestión de flags más complejas en el futuro.
-Evitar el uso de variables de entorno para la gestión de flags dinámicos.
-Espero que esta versión actualizada sea mucho más completa y te ayude a presentar una visión clara de las opciones disponibles, incluyendo la solución dedicada de AWS para feature flags. ¡Mucho éxito con tu presentación
-
 ```
+En resumen:
 
-¡Claro! Aquí tienes la tabla de la Diapositiva 8 en formato Markdown:
+La principal diferencia entre AWS AppConfig y las otras opciones (AWS Systems Manager Parameter Store, Amazon S3, AWS Secrets Manager y Variables de Entorno) para la gestión de feature flags radica en que AppConfig fue construido específicamente para este propósito. Ofrece un conjunto completo de funcionalidades diseñadas para la gestión dinámica, segura y controlada de la configuración, incluyendo un mecanismo de caching eficiente a través de su Agente, despliegues controlados (canary, gradual), validación de configuración, rollback automático, evaluación de reglas multivariante y monitoreo integrado.
 
-Markdown
+AWS Systems Manager Parameter Store y Amazon S3 pueden ser utilizados para almacenar datos de configuración que actúan como flags, pero requieren que la lógica de caching, la gestión de actualizaciones dinámicas y las funcionalidades avanzadas de feature flags se implementen en la aplicación cliente.
 
-| Característica         | AWS AppConfig                      | AWS Systems Manager Parameter Store (Estándar) | Amazon S3                         | AWS Secrets Manager             | Variables de Entorno          |
-| :--------------------- | :--------------------------------- | :------------------------------------------- | :-------------------------------- | :------------------------------- | :---------------------------- |
-| **Costo** | Moderado a Alto                    | Gratuito (Capa Estándar)                     | Bajo (Nivel Gratuito Potencial)   | Nivel Gratuito Limitado        | Gratuito (Implícito)          |
-| **Funcionalidad Flags** | **Alta (Dedicada)** | Básica (Pares Clave-Valor)                   | Flexible (Estructura de Archivo) | Básica (Cadenas JSON)           | Muy Básica                    |
-| **Facilidad de Uso** | Media a Alta                       | Alta                                         | Media                             | Media                           | Baja                          |
-| **Gestión** | **Centralizada y Avanzada** | Manual (Limitada)                            | Manual (Sin Gestión Integrada)    | Enfocada en Secretos           | Difícil a Escala              |
-| **Seguridad** | IAM Integrado, Auditoría         | IAM Integrado                                | IAM Integrado                       | Encriptación Robusta            | Limitada                      |
-| **Escalabilidad** | Alta                             | Buena (Dentro de Límites Gratuitos)         | Alta                              | Limitada por Nivel Gratuito    | Baja                          |
-| **Recomendación Inicial** | Ideal a Largo Plazo (si es crítico) | **Sí (Para empezar)** | Condicional (Baja Frecuencia)     | No Ideal para Flags Generales | No Recomendado a Largo Plazo |
+Despliegues Controlados, Rollback: Estas funcionalidades tendrían que ser implementadas manualmente en la lógica de la aplicación. Esto podría implicar la gestión de grupos de instancias, la implementación de estrategias de despliegue gradual basadas en la lectura de los parámetros y la lógica para revertir cambios si se detectan problemas.
+Validación: La validación de la configuración necesitaría ser codificada en la aplicación para verificar que los parámetros recuperados cumplen con los requisitos esperados.
+Evaluación de Reglas Multivariante: La lógica para determinar qué variante de un flag aplicar a un usuario o contexto específico también debería implementarse en la aplicación, basándose en los valores recuperados de Parameter Store o S3 y la información del usuario/contexto.
+AWS Secrets Manager está principalmente diseñado para almacenar secretos, pero podría usarse para configuraciones simples. Sin embargo, carece inherentemente de funcionalidades para despliegues controlados, validación o evaluación de reglas. Cualquier lógica similar tendría que ser implementada en la aplicación cliente. Su enfoque en la rotación y el cifrado de secretos añade una complejidad innecesaria para la gestión de flags simples. El caching se manejaría de forma similar a Parameter Store (implementación en el cliente o mediante extensiones).
+
+Las Variables de Entorno son la opción menos adecuada para la gestión dinámica de feature flags. No ofrecen mecanismos para caching eficiente, actualizaciones dinámicas sin redeploy, despliegues controlados, validación o evaluación de reglas. Cualquier cambio requiere un reinicio de la aplicación, lo que va en contra de la naturaleza de los feature flags.
+
+La elección entre estas opciones dependerá de los requisitos específicos de tu aplicación, la complejidad de la gestión de tus feature flags y las consideraciones de costo y rendimiento a largo plazo. Para una gestión robusta y con funcionalidades avanzadas de feature flags, AWS AppConfig es la solución recomendada. Parameter Store y S3 pueden ser alternativas más simples para casos de uso muy básicos o donde las funcionalidades avanzadas no son necesarias, pero requieren una mayor inversión en la lógica del lado del cliente. AWS Secrets Manager no es ideal para la gestión general de feature flags, y las Variables de Entorno deben evitarse para la gestión dinámica.
 
 
+¿Qué es el AWS AppConfig Agent?
+
+El AWS AppConfig Agent es un proceso desarrollado y gestionado por Amazon que se ejecuta localmente junto a tu aplicación (por ejemplo, como un sidecar container en ECS/EKS o como un proceso en una instancia EC2). Su principal función es simplificar la forma en que tu aplicación recupera la configuración y los feature flags de AWS AppConfig, además de manejar el caching de manera eficiente.
+
+¿Cómo funciona el Agente y su caché?
+
+Tu aplicación se comunica con el Agente: En lugar de que tu aplicación realice llamadas directas a la API de AWS AppConfig, se comunica con el Agente a través de una interfaz local (generalmente HTTP en localhost en un puerto específico, por defecto el 2772).
+
+El Agente verifica su caché local: Cuando tu aplicación solicita un parámetro de configuración o un feature flag, el Agente primero consulta su propia caché en memoria.
+
+Retorno desde la caché: Si la configuración solicitada está presente en la caché y no ha expirado, el Agente retorna la data directamente desde su memoria caché a tu aplicación de manera muy rápida (en milisegundos). Esto reduce la latencia y la dependencia de la red para las consultas de configuración frecuentes.
+
+Polling asíncrono al servicio de AppConfig: En segundo plano, el Agente periódicamente (a un intervalo predefinido) realiza llamadas asíncronas al servicio de AWS AppConfig para verificar si hay nuevas versiones de la configuración disponibles.
+
+Actualización de la caché: Si el Agente detecta una nueva versión de la configuración, la descarga y actualiza su caché local en memoria. La próxima vez que tu aplicación solicite esa configuración, el Agente devolverá la versión más reciente desde su caché.
+
+Beneficios de usar el AWS AppConfig Agent:
+
+Menor latencia: La recuperación de la configuración desde la caché local es mucho más rápida que realizar una llamada a la API de AWS.
+Reducción de costos: Al disminuir el número de llamadas directas a la API de AppConfig, se pueden reducir los costos asociados al uso del servicio.
+Mayor disponibilidad: Si hay problemas de red entre tu aplicación y los endpoints de AWS AppConfig, tu aplicación aún puede acceder a la configuración desde la caché local del Agente (hasta que la caché expire).
+Gestión simplificada: El Agente abstrae la lógica de polling, caching y gestión de tokens de configuración, simplificando el código de tu aplicación.
+Optimización automática: El Agente implementa las mejores prácticas de AWS para el caching, los intervalos de polling y la disponibilidad de la configuración local.
+Soporte nativo para Feature Flags: El Agente ofrece una experiencia nativa para la resolución de feature flags, incluyendo la evaluación de reglas para flags multivariante.
+¿Cómo se configura el Agente?
+
+La configuración del Agente generalmente se realiza a través de:
+
+Variables de entorno: Puedes configurar varios aspectos del comportamiento del Agente, como el puerto en el que escucha, el intervalo de polling y las estrategias de caché, utilizando variables de entorno.
+Integración en contenedores: Si utilizas ECS o EKS, el Agente se ejecuta típicamente como un sidecar container dentro del mismo pod o tarea que tu aplicación. La configuración se realiza en la definición de la tarea o el pod.
+Instalación en EC2: Para instancias EC2, el Agente se instala como un servicio en el sistema operativo y se configura a través de archivos de configuración o parámetros de inicio.
+En resumen, el AWS AppConfig Agent es un componente clave para una integración eficiente y robusta con AWS AppConfig. Actúa como una capa intermedia que gestiona el caching y la comunicación con el servicio, proporcionando una forma más rápida, confiable y sencilla para que tu aplicación acceda a la configuración y a los feature flags. Es la forma recomendada por AWS para recuperar la configuración en la mayoría de los entornos de computación (EC2, ECS, EKS, Lambda).
 ```
-
-¡Claro! Aquí tienes la tabla de la Diapositiva 8 en formato Markdown:
-
-Markdown
-
-| Característica         | AWS AppConfig                      | AWS Systems Manager Parameter Store (Estándar) | Amazon S3                         | AWS Secrets Manager             | Variables de Entorno          |
-| :--------------------- | :--------------------------------- | :------------------------------------------- | :-------------------------------- | :------------------------------- | :---------------------------- |
-| **Costo** | Moderado a Alto                    | Gratuito (Capa Estándar)                     | Bajo (Nivel Gratuito Potencial)   | Nivel Gratuito Limitado        | Gratuito (Implícito)          |
-| **Funcionalidad Flags** | **Alta (Dedicada)** | Básica (Pares Clave-Valor)                   | Flexible (Estructura de Archivo) | Básica (Cadenas JSON)           | Muy Básica                    |
-| **Facilidad de Uso** | Media a Alta                       | Alta                                         | Media                             | Media                           | Baja                          |
-| **Gestión** | **Centralizada y Avanzada** | Manual (Limitada)                            | Manual (Sin Gestión Integrada)    | Enfocada en Secretos           | Difícil a Escala              |
-| **Seguridad** | IAM Integrado, Auditoría         | IAM Integrado                                | IAM Integrado                       | Encriptación Robusta            | Limitada                      |
-| **Escalabilidad** | Alta                             | Buena (Dentro de Límites Gratuitos)         | Alta                              | Limitada por Nivel Gratuito    | Baja                          |
-| **Recomendación Inicial** | Ideal a Largo Plazo (si es crítico) | **Sí (Para empezar)** | Condicional (Baja Frecuencia)     | No Ideal para Flags Generales | No Recomendado a Largo Plazo |
-
-¡Claro que sí! Entiendo tu necesidad de formalizar la investigación en una historia de usuario para poder presentarla de manera efectiva. Aquí tienes una propuesta de historia de usuario que engloba la investigación y la recomendación del mejor servicio de AWS para la gestión de "feature flags" (o banderas de funcionalidades):
-
-Título: Investigación y Recomendación de la Solución Óptima para la Gestión de Feature Flags en AWS
-
-Como: Líder Técnico
-
-Quiero: Investigar y evaluar las diferentes opciones de servicios de AWS (incluyendo AWS AppConfig, Systems Manager Parameter Store, S3 y Secrets Manager) para la gestión de feature flags, considerando costos, beneficios, seguridad, facilidad de uso y escalabilidad.
-
-Para: Poder presentar una recomendación fundamentada a los demás líderes técnicos sobre la mejor solución para almacenar y gestionar nuestros feature flags, asegurando eficiencia, control y optimización de recursos.
-
-Criterios de Aceptación:
-
-Investigación Completa: Se han investigado y documentado al menos las siguientes opciones de AWS para la gestión de feature flags:
-AWS AppConfig (servicio dedicado)
-AWS Systems Manager Parameter Store
-Amazon S3
-AWS Secrets Manager
-Análisis Comparativo: Se ha realizado un análisis comparativo detallado de cada opción, incluyendo:
-Costos: Estimación de costos según diferentes escenarios de uso (volumen de flags, frecuencia de consulta, etc.). Se debe identificar si alguna opción se ajusta al nivel gratuito o es la más económica a largo plazo.
-Beneficios: Funcionalidades específicas para la gestión de flags (despliegues controlados, validación, etc.), facilidad de uso, integración con otros servicios.
-Seguridad: Mecanismos de seguridad ofrecidos por cada servicio (cifrado, control de acceso IAM).
-Facilidad de Uso y Gestión: Complejidad de configuración, mantenimiento y actualización de los flags.
-Escalabilidad: Capacidad de manejar un número creciente de flags y un aumento en la frecuencia de consulta.
-Identificación de la Mejor Opción: Basándose en el análisis comparativo, se ha identificado la opción que mejor se alinea con las necesidades del sistema, priorizando un equilibrio entre costos, beneficios, seguridad y facilidad de uso. Se debe justificar la elección.
-Documentación de Pros y Contras: Se han documentado claramente las ventajas y desventajas de cada opción investigada.
-Propuesta Clara: Se ha preparado una propuesta concisa y bien estructurada para presentar a los líderes técnicos, destacando la recomendación y los argumentos que la respaldan.
-Consideración de Alternativas: Se han considerado y mencionado brevemente las razones por las que otras opciones podrían no ser la mejor elección (por ejemplo, variables de entorno).
-Notas Adicionales (Opcional):
-
-Podría ser útil incluir una estimación del volumen actual y futuro de feature flags que se espera manejar.
-Mencionar cualquier requisito de seguridad específico que deba considerarse.
-¿Por qué esta historia de usuario es útil?
-
-Define el Objetivo: Claramente establece lo que el líder técnico quiere lograr.
-Identifica el Valor: Explica por qué es importante realizar esta investigación (tomar la mejor decisión para el sistema).
-Establece Criterios de Éxito: Define claramente qué debe entregarse para considerar la tarea completada.
-Facilita la Planificación: Ayuda a organizar el trabajo de investigación y la preparación de la presentación.
