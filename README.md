@@ -428,4 +428,50 @@ HTML
 </body>
 </html>
 
+
+function onExtractionFinish(extractionResult) {
+    console.warn("[Selphi] onExtractionFinish");
+    console.log(extractionResult.detail);
+    console.log("Mi template");
+    console.log(extractionResult.detail.template);
+
+    const nombre = document.querySelector('#nombre')?.textContent; // Obtén el nombre del span
+    const email = document.querySelector('#email')?.textContent;   // Obtén el email del span
+
+    const dataToSend = {
+        nombre: nombre,
+        email: email,
+        template: extractionResult.detail.template,
+        bestImage: JSON.stringify(extractionResult.detail.bestImage),
+        bestImageCropped: JSON.stringify(extractionResult.detail.bestImageCropped),
+        images: JSON.stringify(extractionResult.detail.images),
+        timeStamp: JSON.stringify(extractionResult.detail.timeStamp),
+        templateRaw: extractionResult.detail.templateRaw,
+        livenessMoveFails: extractionResult.detail.livenessMoveFails,
+        livenessMoveHistory: JSON.stringify(extractionResult.detail.livenessMoveHistory),
+        livenessMoveStabilizedHistory: JSON.stringify(extractionResult.detail.livenessMoveStabilizedHistory),
+        livenessMoveStabilizedStatus: extractionResult.detail.livenessMoveStabilizedStatus,
+        bestImageTokenized: extractionResult.detail.bestImageTokenized
+    };
+
+    fetch('/procesarCaptura', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(dataToSend)
+    })
+    .then(response => response.json())
+    .then(data => {
+        console.log('Respuesta del servidor:', data);
+        document.getElementById("widgetEventResult").innerText = 'Success! Datos enviados al servidor';
+        setDemoState(false);
+    })
+    .catch(error => {
+        console.error('Error al enviar datos al servidor:', error);
+        document.getElementById("widgetEventResult").innerText = 'Error al enviar datos';
+        setDemoState(false);
+    });
+}
+
 ```
