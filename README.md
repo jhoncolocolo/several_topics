@@ -1,36 +1,63 @@
 # several_topics
 
+Vamos a desglosar cómo sería el cobro de AWS AppConfig en tu escenario específico con cuatro aplicaciones y cuatro microservicios, donde cada microservicio consulta su respectiva aplicación de configuración y la caché se refresca cada hora.
+
+Tu Escenario:
+
+Cuatro Aplicaciones en AppConfig: pagos, préstamos, compras, seguridad.
+Cuatro Microservicios: pagos, préstamos, compras, seguridad.
+Relación: Cada microservicio consulta la configuración de su aplicación AppConfig con el mismo nombre.
+Frecuencia de "Refresco" (Polling): Cada microservicio (a través del AWS AppConfig Agent) verificará si hay actualizaciones de su configuración cada hora (24 veces al día).
+Proceso de Cobro Detallado:
+
+Vamos a analizar el costo para una sola aplicación y su microservicio correspondiente, y luego lo multiplicaremos por cuatro (asumiendo un comportamiento similar en cada par).
+
+Para una Aplicación (Ejemplo: pagos) y su Microservicio:
+
+Solicitud Inicial: La primera vez que el microservicio pagos (o más precisamente, la instancia donde se ejecuta el agente del microservicio pagos) solicita la configuración de la aplicación pagos, se genera:
+
+1 Solicitud de Configuración: Costo = $0.0000002
+1 Configuración Recibida: Costo = $0.0008
+Polling Horario (Refresco de la "Caché"): Para mantener la "caché" actualizada cada hora, el agente del microservicio pagos realizará un poll al servicio AppConfig cada hora. En un día habrá 24 polls. Cada poll es una Solicitud de Configuración.
+
+24 Solicitudes de Configuración por día: Costo = 24 * $0.0000002 = $0.0000048
+Recepción de Configuración por Polling (si no hay cambios): Si en la mayoría de estos 24 polls diarios no hay cambios en la configuración de la aplicación pagos, no se generará costo de "Configuración Recibida" para esos polls. El agente simplemente verificará y usará su caché local.
+
+Recepción de Configuración por Actualización (si la configuración cambia): Si la configuración de la aplicación pagos cambia durante el día (por ejemplo, una vez), entonces en el poll que ocurra después del cambio, el agente recibirá la nueva configuración, generando un costo de 1 Configuración Recibida: Costo = $0.0008. La frecuencia de estos cambios dependerá de tu dinámica de despliegue de configuración. Para este ejemplo, asumamos que la configuración cambia una vez al día.
+
+Costo Diario Estimado para una Aplicación y su Microservicio:
+
+Costo de Solicitud Inicial (amortizado en el primer día): $0.0000002
+Costo de Configuración Recibida Inicial (amortizado en el primer día): $0.0008
+Costo de Polling Diario (24 solicitudes): $0.0000048
+Costo de Configuración Recibida por Actualización Diaria (asumiendo 1 cambio): $0.0008
+Costo Total Diario por Par (Aplicación + Microservicio): $0.0000002 + $0.0008 + $0.0000048 + $0.0008 = $0.001605
+
+Costo Total Diario Estimado para las Cuatro Aplicaciones y Microservicios:
+
+Si cada uno de los cuatro pares (pagos, préstamos, compras, seguridad) tiene un comportamiento similar, el costo total diario estimado sería:
+
+$0.001605/par * 4 pares = $0.00642
+
+Costo Mensual Estimado:
+
+$0.00642/día * 30 días ≈ $0.1926
+
+Costo Anual Estimado:
+
+$0.00642/día * 365 días ≈ $2.3433
+
+Puntos Clave del Cobro:
+
+Solicitudes: Se cobra por cada verificación horaria (poll) que realiza cada microservicio a su respectiva aplicación.
+Recepciones: Se cobra principalmente la primera vez que cada microservicio obtiene la configuración y cada vez que la configuración cambia y el agente la descarga. Si la configuración no cambia durante los polls horarios, no hay costo adicional por recepción.
+Por Destino: Estos costos se aplican por cada instancia de tu microservicio. Si tienes múltiples instancias del microservicio pagos, cada una tendrá su propio ciclo de solicitudes y recepciones. Los cálculos anteriores asumen una instancia por microservicio. Si tienes más instancias, debes multiplicar los costos por el número de instancias por microservicio.
+En resumen:
+
+El cobro se basa en la actividad de cada microservicio al interactuar con su aplicación de configuración. La estrategia de refrescar la caché cada hora generará 24 solicitudes de configuración por día por cada instancia de cada microservicio. El costo de recepción se incurrirá inicialmente y cada vez que la configuración cambie.
+
+Recuerda que estos son cálculos estimados basados en las suposiciones de una instancia por microservicio y una actualización de configuración por día por aplicación. Los costos reales pueden variar según el número de instancias y la frecuencia con la que actualices tus configuraciones.
+
 ```
-Informe General: Comparación de Gestión de Configuración y Costos
-
-Escenario Actual (Microsoft Azure App Configuration con Caché Java):
-
-Gestión de Configuración: Un microservicio realiza llamadas al servicio Azure App Configuration para obtener los parámetros de configuración.
-Gestión de Caché: La aplicación Java implementa una lógica de caché local. Esta caché tiene un ciclo de vida (ej., una hora), y la recarga de la caché se activa generalmente por la primera solicitud después de la expiración del TTL o por un evento específico.
-Costos (Estimación): Se incurre en costos por cada llamada realizada al servicio Azure App Configuration. Si, por ejemplo, la caché se recarga cada hora debido a la primera solicitud de un usuario, y tienes un volumen significativo de usuarios, esto puede generar un número considerable de llamadas diarias al servicio de configuración, lo que se traduce en costos directos por esas solicitudes. Además, la lógica de caché debe ser implementada y mantenida dentro de la aplicación Java.
-Escenario Propuesto (AWS AppConfig con Agente):
-
-Gestión de Configuración: Se utilizará AWS AppConfig para almacenar y gestionar las configuraciones. El microservicio interactuará con el AWS AppConfig Agent.
-Gestión de Caché: El AWS AppConfig Agent gestiona automáticamente una caché local en la instancia donde se ejecuta el microservicio. El agente realiza un polling asíncrono al servicio AppConfig para verificar actualizaciones en un intervalo configurable. Las lecturas de configuración posteriores a la primera (dentro del intervalo de polling y sin cambios en la configuración) se realizan directamente desde la caché local del agente.
-Costos (Estimación):
-Solicitudes de configuración: Se cobra por cada solicitud que llega al servicio AWS AppConfig. La primera solicitud de una instancia por configuración (o después de una actualización) generará un costo. Las lecturas desde la caché local del agente no generan costos de solicitud.
-Configuraciones Recibidas: Se cobra cada vez que el agente descarga datos de configuración actualizados.
-Beneficio: El uso del agente y su caché local reduce significativamente la cantidad de llamadas directas al servicio AppConfig, lo que disminuye los costos en comparación con un escenario donde cada solicitud (o un evento periódico frecuente) dispara una llamada al servicio de configuración.
-URL de Precios de AWS AppConfig:
-
-Puedes encontrar la información detallada de los precios de AWS AppConfig en la página oficial de AWS Systems Manager:
-
-https://aws.amazon.com/es/systems-manager/pricing/
-
-(Busca la sección específica de "Application Configuration Manager (AppConfig)")
-
-URL de Precios de Azure App Configuration:
-
-Puedes encontrar la información detallada de los precios de Azure App Configuration en la página oficial de Azure:
-
-https://azure.microsoft.com/es-es/pricing/details/app-configuration/
-
-Conclusión General:
-
-La migración a AWS AppConfig con su agente integrado y gestión de caché local tiene el potencial de reducir significativamente los costos asociados a la recuperación de configuración en comparación con un modelo donde la caché se gestiona a nivel de aplicación y cada solicitud (o un evento periódico) puede generar una llamada al servicio de configuración. AWS AppConfig está diseñado para optimizar las llamadas al servicio, cobrando principalmente por la obtención inicial de la configuración y por las actualizaciones, mientras que las lecturas frecuentes se sirven desde la caché local sin incurrir en costos adicionales por solicitud. Esto se traduce en una gestión de configuración más eficiente y potencialmente más económica para aplicaciones con un alto volumen de lecturas de configuración.
+ 
 ```
