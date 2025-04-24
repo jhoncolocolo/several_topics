@@ -1,5 +1,7 @@
-<div id="mensajeServidor" class="alert alert-success" style="display: none;"></div>
+
 ```
+<div id="mensajeServidor" class="alert alert-success" style="display: none;"></div>
+
  fetch('TU_URL_POST', {
   method: 'POST',
   // ... otras configuraciones como headers y body ...
