@@ -64,4 +64,29 @@ WHERE
         WHEN TRIM(VALOR) NOT LIKE '-%' AND TRIM(VALOR) LIKE '%[0-9]%' AND TRIM(VALOR) NOT LIKE '%[^0-9]%' THEN 1
         ELSE 0
     END = 1;
+
+
+✅ Consulta corregida para devolver solo valores numéricos (positivos o negativos):
+sql
+Copiar
+Editar
+SELECT VALOR
+FROM DATOS_MIX
+WHERE 
+    TRY_CAST(TRIM(VALOR) AS INTEGER) IS NOT NULL;
+✅ Alternativa si TRY_CAST no está disponible:
+sql
+Copiar
+Editar
+SELECT VALOR
+FROM DATOS_MIX
+WHERE 
+    TRANSLATE(TRIM(VALOR), '', '0123456789-') = ''
+    AND (TRIM(VALOR) <> '-' AND TRIM(VALOR) <> '');
+¿Qué hace esta versión?
+TRANSLATE(TRIM(VALOR), '', '0123456789-') = '': elimina todos los caracteres válidos (0-9 y -) y revisa si queda algo; si queda algo, entonces había caracteres no numéricos.
+
+(TRIM(VALOR) <> '-' AND TRIM(VALOR) <> ''): asegura que no pase solo un guion - o una celda vacía.
+
+¿Te gustaría también que se devuelvan co
 ```
