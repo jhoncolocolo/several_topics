@@ -1,92 +1,154 @@
 
 ```
- SELECT
-    SUBSTR(MESSAGE, LOCATE(':', MESSAGE) + 2, LOCATE('|', MESSAGE) - LOCATE(':', MESSAGE) - 2) AS extracted_number
-FROM
-    EXAMPLE
-WHERE
-    MESSAGE LIKE '%:% |%';
-
-
-
-SELECT
-    SUBSTR(MESSAGE, LOCATE(':', MESSAGE) + 2, LOCATE('|', MESSAGE) - LOCATE(':', MESSAGE) - 2) AS extracted_value
-FROM
-    EXAMPLE
-WHERE
-    MESSAGE LIKE '%:% |%'
-    AND CASE
-        WHEN SUBSTR(MESSAGE, LOCATE(':', MESSAGE) + 2, LOCATE('|', MESSAGE) - LOCATE(':', MESSAGE) - 2) LIKE '%[^0-9-]%'
-        OR LENGTH(TRIM(SUBSTR(MESSAGE, LOCATE(':', MESSAGE) + 2, LOCATE('|', MESSAGE) - LOCATE(':', MESSAGE) - 2))) = 0
-        OR (SUBSTR(MESSAGE, LOCATE(':', MESSAGE) + 2, LOCATE('|', MESSAGE) - LOCATE(':', MESSAGE) - 2) LIKE '-' AND LENGTH(SUBSTR(MESSAGE, LOCATE(':', MESSAGE) + 2, LOCATE('|', MESSAGE) - LOCATE(':', MESSAGE) - 2)) = 1)
-        THEN 0
-        ELSE 1
-    END = 1;
-
-
-SELECT VALOR
-FROM DATOS_MIX
-WHERE
-    CASE
-        WHEN VALOR LIKE '%[^0-9-]%' THEN 0  -- Contiene caracteres no numéricos (excepto '-')
-        WHEN VALOR LIKE '-' AND LENGTH(VALOR) = 1 THEN 0 -- Es solo el signo menos
-        WHEN VALOR LIKE '%-%' AND LENGTH(VALOR) = 1 THEN 0 -- Es solo el signo menos (redundante pero por claridad)
-        WHEN VALOR LIKE '-%' AND SUBSTR(VALOR, 2) NOT LIKE '%[^0-9]%' THEN 1 -- Empieza con '-' y el resto son dígitos
-        WHEN VALOR LIKE '%[0-9]%' AND VALOR NOT LIKE '%[^0-9]%' THEN 1 -- Contiene solo dígitos
-        ELSE 0
-    END = 1;
-
-Entiendo. Si solo te devolvió los -1, eso sugiere que la condición para los números negativos podría ser demasiado restrictiva o que hay alguna sutileza en tus datos que no estamos considerando.
-
-Revisemos la parte de la consulta relacionada con los números negativos:
-
-SQL
-
-WHEN VALOR LIKE '-%' AND SUBSTR(VALOR, 2) NOT LIKE '%[^0-9]%' THEN 1
-Esta condición busca valores que empiecen con un guion (-) y donde todos los caracteres después del guion sean dígitos. Esto debería cubrir casos como -45 o -9.
-
-Posibles causas por las que no se extrajeron otros números negativos:
-
-Espacios en blanco: Podría haber espacios en blanco inesperados alrededor del signo menos o de los números. Por ejemplo, " -45" o "- 45".
-Caracteres no visibles: Podría haber caracteres no imprimibles o de control que estén interfiriendo con la coincidencia del patrón LIKE.
-Formato inconsistente: Quizás los números negativos tienen un formato ligeramente diferente en algunos registros.
-Aquí te propongo una modificación a la consulta para hacerla un poco más robusta ante posibles espacios en blanco y para asegurarnos de que la lógica para los números negativos sea correcta:
-
-SQL
-
-SELECT VALOR
-FROM DATOS_MIX
-WHERE
-    CASE
-        WHEN TRIM(VALOR) LIKE '%[^0-9-]%' THEN 0
-        WHEN TRIM(VALOR) = '-' THEN 0
-        WHEN TRIM(VALOR) LIKE '-%' AND SUBSTR(TRIM(VALOR), 2) NOT LIKE '%[^0-9]%' THEN 1
-        WHEN TRIM(VALOR) NOT LIKE '-%' AND TRIM(VALOR) LIKE '%[0-9]%' AND TRIM(VALOR) NOT LIKE '%[^0-9]%' THEN 1
-        ELSE 0
-    END = 1;
-
-
-✅ Consulta corregida para devolver solo valores numéricos (positivos o negativos):
-sql
+✅ Método setSecrets modificado:
+java
 Copiar
 Editar
-SELECT VALOR
-FROM DATOS_MIX
-WHERE 
-    TRY_CAST(TRIM(VALOR) AS INTEGER) IS NOT NULL;
-✅ Alternativa si TRY_CAST no está disponible:
-sql
+public void setSecrets(Map<String, Credencial> secrets) {
+    this.secrets = secrets;
+
+    // Agrupar credenciales por cliente_id
+    Map<String, List<Credencial>> agrupadasPorClienteId = secrets.values().stream()
+        .collect(Collectors.groupingBy(Credencial::getCliente_id));
+
+    for (Map.Entry<String, List<Credencial>> entry : agrupadasPorClienteId.entrySet()) {
+        String clienteId = entry.getKey();
+        List<Credencial> credenciales = entry.getValue();
+
+        // Obtener secretos una sola vez por cliente_id
+        KeyVaultSecret tokenAplicacionSecret = getKeyVaultSecret(
+                String.format(EXTERNAL_SERVICE_TOKEN_APP, clienteId));
+        KeyVaultSecret xApiKeySecret = getKeyVaultSecret(
+                String.format(EXTERNAL_SERVICE_X_API_KEY, clienteId));
+
+        for (Credencial credencial : credenciales) {
+            if (credencial.getTokenAplicacion() == null && tokenAplicacionSecret != null) {
+                credencial.setTokenAplicacion(tokenAplicacionSecret.getValue());
+            }
+            if (credencial.getApiKey() == null && xApiKeySecret != null) {
+                credencial.setApiKey(xApiKeySecret.getValue());
+            }
+        }
+    }
+}
+✅ Unit Test con Mockito (JUnit 5, Java 17)
+Supongamos que tienes:
+
+KeyVaultSecret(String value)
+
+KeyVaultService.getSecret(String name) que devuelve KeyVaultSecret
+
+java
 Copiar
 Editar
-SELECT VALOR
-FROM DATOS_MIX
-WHERE 
-    TRANSLATE(TRIM(VALOR), '', '0123456789-') = ''
-    AND (TRIM(VALOR) <> '-' AND TRIM(VALOR) <> '');
-¿Qué hace esta versión?
-TRANSLATE(TRIM(VALOR), '', '0123456789-') = '': elimina todos los caracteres válidos (0-9 y -) y revisa si queda algo; si queda algo, entonces había caracteres no numéricos.
+@ExtendWith(MockitoExtension.class)
+class ModuloCredencialConfiguracionTest {
 
-(TRIM(VALOR) <> '-' AND TRIM(VALOR) <> ''): asegura que no pase solo un guion - o una celda vacía.
+    @Mock
+    KeyVaultService keyVaultService;
 
-¿Te gustaría también que se devuelvan co
+    @InjectMocks
+    ModuloCredencialConfiguracion configuracion;
+
+    @Test
+    void testSetSecrets_agrupadoPorClienteId() {
+        // Arrange
+        Map<String, Credencial> mapa = new LinkedHashMap<>();
+        mapa.put("modulo_uno", new Credencial("999", "m999", null, null));
+        mapa.put("modulo_dos", new Credencial("999", "m999", null, null));
+        mapa.put("modulo_tres", new Credencial("999", "m999", null, null));
+        mapa.put("modulo_cuatro", new Credencial("777", "m777", null, null));
+        mapa.put("modulo_cinco", new Credencial("777", "m777", null, null));
+        mapa.put("modulo_seis", new Credencial("666", "m666", null, null));
+        mapa.put("modulo_siete", new Credencial("555", "m555", null, null));
+        mapa.put("defecto", new Credencial("88", "desarrollo2", null, null));
+
+        // Simular getSecret para cada cliente_id (2 secretos por cada uno)
+        when(keyVaultService.getSecret("ext_serv-token-app-999"))
+            .thenReturn(new KeyVaultSecret("TOKEN999"));
+        when(keyVaultService.getSecret("ext_serv-x-api-key-999"))
+            .thenReturn(new KeyVaultSecret("API999"));
+
+        when(keyVaultService.getSecret("ext_serv-token-app-777"))
+            .thenReturn(new KeyVaultSecret("TOKEN777"));
+        when(keyVaultService.getSecret("ext_serv-x-api-key-777"))
+            .thenReturn(new KeyVaultSecret("API777"));
+
+        when(keyVaultService.getSecret("ext_serv-token-app-666"))
+            .thenReturn(new KeyVaultSecret("TOKEN666"));
+        when(keyVaultService.getSecret("ext_serv-x-api-key-666"))
+            .thenReturn(new KeyVaultSecret("API666"));
+
+        when(keyVaultService.getSecret("ext_serv-token-app-555"))
+            .thenReturn(new KeyVaultSecret("TOKEN555"));
+        when(keyVaultService.getSecret("ext_serv-x-api-key-555"))
+            .thenReturn(new KeyVaultSecret("API555"));
+
+        when(keyVaultService.getSecret("ext_serv-token-app-88"))
+            .thenReturn(new KeyVaultSecret("TOKEN88"));
+        when(keyVaultService.getSecret("ext_serv-x-api-key-88"))
+            .thenReturn(new KeyVaultSecret("API88"));
+
+        // Act
+        configuracion.setSecrets(mapa);
+
+        // Assert
+        assertEquals("TOKEN999", mapa.get("modulo_uno").getTokenAplicacion());
+        assertEquals("API999", mapa.get("modulo_uno").getApiKey());
+        assertEquals("TOKEN999", mapa.get("modulo_tres").getTokenAplicacion());
+
+        assertEquals("TOKEN777", mapa.get("modulo_cinco").getTokenAplicacion());
+        assertEquals("API777", mapa.get("modulo_cinco").getApiKey());
+
+        assertEquals("TOKEN666", mapa.get("modulo_seis").getTokenAplicacion());
+        assertEquals("API666", mapa.get("modulo_seis").getApiKey());
+
+        assertEquals("TOKEN555", mapa.get("modulo_siete").getTokenAplicacion());
+        assertEquals("API555", mapa.get("modulo_siete").getApiKey());
+
+        assertEquals("TOKEN88", mapa.get("defecto").getTokenAplicacion());
+        assertEquals("API88", mapa.get("defecto").getApiKey());
+
+        // Verifica que solo se llamaron 10 veces (2 por cada cliente_id distinto)
+        verify(keyVaultService, times(1)).getSecret("ext_serv-token-app-999");
+        verify(keyVaultService, times(1)).getSecret("ext_serv-x-api-key-999");
+        verify(keyVaultService, times(1)).getSecret("ext_serv-token-app-777");
+        verify(keyVaultService, times(1)).getSecret("ext_serv-x-api-key-777");
+        verify(keyVaultService, times(1)).getSecret("ext_serv-token-app-666");
+        verify(keyVaultService, times(1)).getSecret("ext_serv-x-api-key-666");
+        verify(keyVaultService, times(1)).getSecret("ext_serv-token-app-555");
+        verify(keyVaultService, times(1)).getSecret("ext_serv-x-api-key-555");
+        verify(keyVaultService, times(1)).getSecret("ext_serv-token-app-88");
+        verify(keyVaultService, times(1)).getSecret("ext_serv-x-api-key-88");
+    }
+
+    // Clase auxiliar simulada si no existe
+    static class Credencial {
+        private String cliente_id;
+        private String ruta;
+        private String apiKey;
+        private String tokenAplicacion;
+
+        public Credencial(String cliente_id, String ruta, String apiKey, String tokenAplicacion) {
+            this.cliente_id = cliente_id;
+            this.ruta = ruta;
+            this.apiKey = apiKey;
+            this.tokenAplicacion = tokenAplicacion;
+        }
+
+        public String getCliente_id() { return cliente_id; }
+        public String getRuta() { return ruta; }
+        public String getApiKey() { return apiKey; }
+        public String getTokenAplicacion() { return tokenAplicacion; }
+        public void setApiKey(String apiKey) { this.apiKey = apiKey; }
+        public void setTokenAplicacion(String tokenAplicacion) { this.tokenAplicacion = tokenAplicacion; }
+    }
+
+    static class KeyVaultSecret {
+        private final String value;
+        public KeyVaultSecret(String value) { this.value = value; }
+        public String getValue() { return value; }
+    }
+}
+
 ```
