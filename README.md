@@ -46,4 +46,90 @@ public class CredencialService {
         return null;
     }
 }
+
+
+
+
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import static org.junit.jupiter.api.Assertions.*;
+
+import java.util.HashMap;
+import java.util.Map;
+
+public class CredencialServiceTest {
+
+    private CredencialService service;
+
+    @BeforeEach
+    void setup() {
+        Map<String, Map<String, ModuloCredencialConfiguracion.Credencial>> paises = new HashMap<>();
+
+        // default.default
+        ModuloCredencialConfiguracion.Credencial defaultDefault = new ModuloCredencialConfiguracion.Credencial();
+        defaultDefault.setCliente_id("88");
+        defaultDefault.setLlave_ruta("AAAAAAAAAAAAAAAAAAAAA");
+
+        Map<String, ModuloCredencialConfiguracion.Credencial> defaultModulos = new HashMap<>();
+        defaultModulos.put("modulo_tres", crearCredencial("999", "m999"));
+        defaultModulos.put("default", defaultDefault);
+
+        Map<String, ModuloCredencialConfiguracion.Credencial> argentinaModulos = new HashMap<>();
+        argentinaModulos.put("modulo_tres", crearCredencial("333", "m333"));
+
+        paises.put("default", defaultModulos);
+        paises.put("Argentina", argentinaModulos);
+
+        service = new CredencialService(paises);
+    }
+
+    @Test
+    void testObtenerCredencialConPais() {
+        var cred = service.obtenerCredencial("modulo_tres", "Argentina");
+        assertNotNull(cred);
+        assertEquals("333", cred.getCliente_id());
+        assertEquals("m333", cred.getRuta());
+    }
+
+    @Test
+    void testObtenerCredencialSinPais() {
+        var cred = service.obtenerCredencial("modulo_tres");
+        assertNotNull(cred);
+        assertEquals("999", cred.getCliente_id());
+        assertEquals("m999", cred.getRuta());
+    }
+
+    @Test
+    void testFallbackADefaultDefault() {
+        var cred = service.obtenerCredencial("modulo_inexistente", "Argentina");
+        assertNotNull(cred);
+        assertEquals("88", cred.getCliente_id());
+        assertEquals("AAAAAAAAAAAAAAAAAAAAA", cred.getLlave_ruta());
+    }
+
+    @Test
+    void testModuloNoExisteEnDefault() {
+        var cred = service.obtenerCredencial("modulo_inexistente");
+        assertNotNull(cred);
+        assertEquals("88", cred.getCliente_id());
+        assertEquals("AAAAAAAAAAAAAAAAAAAAA", cred.getLlave_ruta());
+    }
+
+    @Test
+    void testModuloNuloLanzaExcepcion() {
+        assertThrows(IllegalArgumentException.class, () -> {
+            service.obtenerCredencial(null, "Argentina");
+        });
+    }
+
+    @Test
+    void testModuloVacioLanzaExcepcion() {
+        assertThrows(IllegalArgumentException.class, () -> {
+            service.obtenerCredencial("  ");
+        });
+    }
+
+    private ModuloCredencialConfiguracion.Credencial crearCredencial(String clienteId, String ruta) {
+        ModuloCredencialConfiguracion.Credencial cred = new ModuloCredencialConfiguracion.Credencial();
+
 ```
