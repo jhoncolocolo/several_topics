@@ -132,4 +132,116 @@ public class CredencialServiceTest {
     private ModuloCredencialConfiguracion.Credencial crearCredencial(String clienteId, String ruta) {
         ModuloCredencialConfiguracion.Credencial cred = new ModuloCredencialConfiguracion.Credencial();
 
+
+paises:
+  default:
+    modulos:
+      secretos:
+        modulo_uno:
+          cliente_id: 999
+          ruta: m999
+        modulo_dos:
+          cliente_id: 999
+          ruta: m999
+        modulo_tres:
+          cliente_id: 999
+          ruta: m999
+        modulo_cuatro:
+          cliente_id: 777
+          ruta: m777
+        modulo_cinco:
+          cliente_id: 777
+          ruta: m777
+        modulo_seis:
+          cliente_id: 666
+          ruta: m666
+        modulo_siete:
+          cliente_id: 555
+          ruta: m555
+      default:
+        cliente_id: 88
+        llave_ruta: AAAAAAAAAAAAAAAAAAAAA
+  Colombia:
+    modulos:
+      secretos:
+        modulo_uno:
+          cliente_id: 999
+          ruta: m999
+        modulo_dos:
+          cliente_id: 999
+          ruta: m999
+        modulo_tres:
+          cliente_id: 999
+          ruta: m999
+        modulo_cuatro:
+          cliente_id: 777
+          ruta: m777
+        modulo_cinco:
+          cliente_id: 777
+          ruta: m777
+        modulo_seis:
+          cliente_id: 666
+          ruta: m666
+        modulo_siete:
+          cliente_id: 555
+          ruta: m555
+      default:
+        cliente_id: 88
+        llave_ruta: AAAAAAAAAAAAAAAAAAAAA
+  Peru:
+    modulos:
+      secretos:
+        modulo_uno:
+          cliente_id: 999
+          ruta: m999
+        modulo_dos:
+          cliente_id: 999
+          ruta: m999
+        modulo_tres:
+          cliente_id: 999
+          ruta: m999
+        modulo_cuatro:
+          cliente_id: 777
+          ruta: m777
+        modulo_cinco:
+          cliente_id: 777
+          ruta: m777
+        modulo_seis:
+          cliente_id: 666
+          ruta: m666
+        modulo_siete:
+          cliente_id: 555
+          ruta: m555
+      default:
+        cliente_id: 88
+        llave_ruta: AAAAAAAAAAAAAAAAAAAAA
+  Argentina:
+    modulos:
+      secretos:
+        modulo_uno:
+          cliente_id: 999
+          ruta: m999
+        modulo_dos:
+          cliente_id: 999
+          ruta: m999
+        modulo_tres:
+          cliente_id: 333
+          ruta: m333
+        modulo_cuatro:
+          cliente_id: 777
+          ruta: m777
+        modulo_cinco:
+          cliente_id: 777
+          ruta: m777
+        modulo_seis:
+          cliente_id: 666
+          ruta: m666
+        modulo_siete:
+          cliente_id: 555
+          ruta: m555
+      default:
+        cliente_id: 88
+        llave_ruta: AAAAAAAAAAAAAAAAAAAAA
+
+
 ```
