@@ -293,5 +293,84 @@ class PaisesConfigTest {
 ```
 
 
+```
+🔧 Ejemplo completo (JUnit 5 sin contexto de Spring)
+🧾 Archivo: src/test/resources/application.yml
+yaml
+Copiar
+Editar
+paises:
+  codigo: default
+  modulos:
+    secretos:
+      modulo_tres:
+        cliente_id: 999
+        ruta: m999
+      default:
+        cliente_id: 88
+        llave_ruta: AAAAAAAAAAAAAAAAAAAAA
+🧑‍💻 Clase modelo: PaisesConfig.java
+java
+Copiar
+Editar
+import lombok.Data;
+import java.util.Map;
+
+@Data
+public class PaisesConfig {
+    private String codigo;
+    private Modulos modulos;
+
+    @Data
+    public static class Modulos {
+        private Map<String, Credencial> secretos;
+    }
+
+    @Data
+    public static class Credencial {
+        private String cliente_id;
+        private String ruta;
+        private String llave_ruta;
+    }
+}
+🧪 Test sin Spring:
+java
+Copiar
+Editar
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
+import org.junit.jupiter.api.Test;
+
+import java.io.InputStream;
+
+import static org.junit.jupiter.api.Assertions.*;
+
+public class PaisesYamlTest {
+
+    @Test
+    void cargarYamlSinSpringContext() throws Exception {
+        ObjectMapper mapper = new ObjectMapper(new YAMLFactory());
+        
+        try (InputStream input = getClass().getClassLoader().getResourceAsStream("application.yml")) {
+            assertNotNull(input, "No se encontró el archivo application.yml");
+
+            // Se debe leer desde la raíz `paises`, así que usamos un wrapper temporal
+            var root = mapper.readTree(input);
+            var paisesNode = root.get("paises");
+            assertNotNull(paisesNode, "No se encontró el nodo 'paises' en el YAML");
+
+            PaisesConfig config = mapper.treeToValue(paisesNode, PaisesConfig.class);
+
+            assertEquals("default", config.getCodigo());
+            assertTrue(config.getModulos().getSecretos().containsKey("modulo_tres"));
+
+            var cred = config.getModulos().getSecretos().get("modulo_tres");
+            assertEquals("999", cred.getCliente_id());
+            assertEquals("m999", cred.getRuta());
+        }
+    }
+}
+```
+
 
 
