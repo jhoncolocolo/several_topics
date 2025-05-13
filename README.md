@@ -1,30 +1,59 @@
 ```
- @ExtendWith(SpringExtension.class)
-@SpringBootTest(classes = ModuloCredencialConfiguracionTest.TestConfig.class)
-@TestPropertySource("classpath:application.yml")
-class ModuloCredencialConfiguracionTest {
+@Component
+@ConfigurationProperties(prefix = "modules")
+@Data
+public class ModuloCredencialConfiguracion {
+    private List<PaisSecretsConfig> countries;
 
-    @Autowired
-    private ModuloCredencialConfiguracion config;
+    private final Map<String, Map<String, Credencial>> secretsPorPais = new HashMap<>();
 
-    @TestConfiguration
-    @EnableConfigurationProperties(ModuloCredencialConfiguracion.class)
-    static class TestConfig {
-        // no necesita cuerpo
+    @PostConstruct
+    public void init() {
+        Map<String, Map<String, Credencial>> porPais = new HashMap<>();
+        for (PaisSecretsConfig pais : countries) {
+            porPais.put(pais.getCode(), pais.getSecrets());
+        }
+
+        // Ahora llama al setSecrets con ese mapa
+        setSecrets(porPais);
     }
 
-    @Test
-    void testCargaDesdeYaml() {
-        assertNotNull(config);
-        assertNotNull(config.getSecrets());
-        assertTrue(config.getSecrets().containsKey("modulo_uno"));
-
-        ModuloCredencialConfiguracion.Credencial credencial = config.getSecrets().get("modulo_uno");
-        assertEquals("999", credencial.getCliente_id());
-        assertEquals("m999", credencial.getRuta());
+    public void setSecrets(Map<String, Map<String, Credencial>> configuracionPorPais) {
+        // Tu algoritmo tal como lo tienes va aquí y funcionará perfectamente
     }
 }
 
+@Data
+public class PaisSecretsConfig {
+    private String code;
+    private Map<String, Credencial> secrets;
+}
+
+@Data
+public class Credencial {
+    @JsonProperty("client_id")
+    private String cliente_id;
+    private String path;
+
+    // Esto lo asignas luego con los secretos
+    private String tokenAplicacion;
+    private String apiKey;
+}
+
+
+modules:
+  countries:
+    - code: default
+      secrets:
+        module_one:
+          client_id: 999
+          path: m999
+    - code: pa
+      secrets:
+        module_two:
+          client_id: 888
+          path: m888
+ 
 ```
 
 
