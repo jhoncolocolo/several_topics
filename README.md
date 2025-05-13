@@ -242,6 +242,56 @@ paises:
       default:
         cliente_id: 88
         llave_ruta: AAAAAAAAAAAAAAAAAAAAA
+@Component
+@ConfigurationProperties(prefix = "paises")
+@Data
+public class PaisesConfig {
+    private Map<String, Pais> paises;
+
+    @Data
+    public static class Pais {
+        private Modulos modulos;
+    }
+
+    @Data
+    public static class Modulos {
+        private Map<String, ModuloCredencialConfiguracion.Credencial> secretos;
+        private ModuloCredencialConfiguracion.Credencial defaultCredencial; // usa "default" del YAML
+    }
+}
+
+
+@ExtendWith(SpringExtension.class)
+@SpringBootTest(classes = PaisesConfig.class)
+@TestPropertySource(locations = "classpath:application.yml")
+@EnableConfigurationProperties(PaisesConfig.class)
+class PaisesConfigTest {
+
+    @Autowired
+    private PaisesConfig config;
+
+    @Test
+    void debeCargarConfiguracionDesdeYaml() {
+        assertNotNull(config);
+        assertNotNull(config.getPaises());
+
+        // Verificamos que exista el país Argentina
+        assertTrue(config.getPaises().containsKey("Argentina"));
+
+        var argentina = config.getPaises().get("Argentina");
+
+        assertNotNull(argentina.getModulos().getSecretos().get("modulo_tres"));
+        assertEquals("333", argentina.getModulos().getSecretos().get("modulo_tres").getCliente_id());
+
+        // Verificamos default
+        assertNotNull(argentina.getModulos().getDefaultCredencial());
+        assertEquals("88", argentina.getModulos().getDefaultCredencial().getCliente_id());
+    }
+}
 
 
 ```
+
+
+
+
