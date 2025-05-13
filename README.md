@@ -1,19 +1,49 @@
-Comandos
+```
+public class CredencialService {
 
-# Check out to a temporary branch:
-git checkout --orphan TEMP_BRANCH
+    private final Map<String, Map<String, ModuloCredencialConfiguracion.Credencial>> paises;
 
-# Add all the files:
-git add -A
+    public CredencialService(Map<String, Map<String, ModuloCredencialConfiguracion.Credencial>> paises) {
+        this.paises = paises;
+    }
 
-# Commit the changes:
-git commit -am "Initial commit"
+    /**
+     * Obtiene una credencial por módulo y país.
+     * Si el país es null o vacío, busca solo en "default".
+     */
+    public ModuloCredencialConfiguracion.Credencial obtenerCredencial(String modulo, String pais) {
+        // Validar el parámetro
+        if (modulo == null || modulo.isBlank()) {
+            throw new IllegalArgumentException("El nombre del módulo no puede ser nulo o vacío");
+        }
 
-# Delete the old branch:
-git branch -D master
+        // Si hay país, intenta buscar primero en ese país
+        if (pais != null && !pais.isBlank()) {
+            ModuloCredencialConfiguracion.Credencial credencial = buscarEnPais(modulo, pais);
+            if (credencial != null) {
+                return credencial;
+            }
+        }
 
-# Rename the temporary branch to master:
-git branch -m master
+        // Si no encontró en el país o no se proporcionó, buscar en 'default'
+        ModuloCredencialConfiguracion.Credencial credencial = buscarEnPais(modulo, "default");
+        if (credencial != null) {
+            return credencial;
+        }
 
-# Finally, force update to our repository:
-git push -f origin master
+        // Retornar el default.default
+        return buscarEnPais("default", "default");
+    }
+
+    /**
+     * Busca una credencial dentro del mapa de un país específico.
+     */
+    private ModuloCredencialConfiguracion.Credencial buscarEnPais(String modulo, String pais) {
+        Map<String, ModuloCredencialConfiguracion.Credencial> modulos = paises.get(pais);
+        if (modulos != null) {
+            return modulos.get(modulo);
+        }
+        return null;
+    }
+}
+```
