@@ -1,74 +1,49 @@
 ```
- @ConfigurationProperties(prefix = "modules")
-@Data
-public class ModuloCredencialConfiguracion {
+public void setCountries(List<Pais> countries) {
+    this.countries = countries;
 
-    private List<Pais> countries;
+    // 1. Obtener los secretos del país default
+    Map<String, Credencial> secretosDefault = countries.stream()
+        .filter(p -> DEFAULT.equals(p.getCode()))
+        .findFirst()
+        .map(Pais::getSecrets)
+        .orElse(Map.of());
 
-    @Autowired
-    private KeyVaultService keyVaultService;
+    List<Credencial> todas = new ArrayList<>();
 
-    @PostConstruct
-    public void inicializar() {
-        Map<String, Map<String, Credencial>> secretsPorPais = new HashMap<>();
+    for (Pais pais : countries) {
+        Map<String, Credencial> secretosCombinados = new HashMap<>();
 
-        // 1. Separar default
-        Map<String, Credencial> secretosDefault = countries.stream()
-                .filter(p -> "default".equals(p.getCode()))
-                .findFirst()
-                .map(Pais::getSecrets)
-                .orElse(Map.of());
-
-        List<Credencial> todasLasCredenciales = new ArrayList<>();
-
-        // 2. Procesar países y aplicar herencia
-        for (Pais pais : countries) {
-            Map<String, Credencial> secretos = new HashMap<>(secretosDefault);
-            secretos.putAll(pais.getSecrets()); // Sobrescribir si aplica
-
-            todasLasCredenciales.addAll(secretos.values());
-            secretsPorPais.put(pais.getCode(), secretos);
+        // 2. Heredar secretos del default (copiamos para evitar referencias compartidas)
+        for (Map.Entry<String, Credencial> entry : secretosDefault.entrySet()) {
+            secretosCombinados.put(entry.getKey(), new Credencial(entry.getValue()));
         }
 
-        // 3. Agrupar por client_id
-        Map<String, List<Credencial>> porClienteId = todasLasCredenciales.stream()
-                .collect(Collectors.groupingBy(Credencial::getClientId));
-
-        for (Map.Entry<String, List<Credencial>> entry : porClienteId.entrySet()) {
-            String clienteId = entry.getKey();
-            List<Credencial> credenciales = entry.getValue();
-
-            KeyVaultSecret token = getKeyVaultSecret(String.format(EXTERNAL_SERVICE_TOKEN_APP, clienteId));
-            KeyVaultSecret apiKey = getKeyVaultSecret(String.format(EXTERNAL_SERVICE_X_API_KEY, clienteId));
-
-            for (Credencial cred : credenciales) {
-                cred.setTokenAplicacion(token.getValue());
-                cred.setApiKey(apiKey.getValue());
+        // 3. Sobrescribir con los secretos propios del país
+        if (pais.getSecrets() != null) {
+            for (Map.Entry<String, Credencial> entry : pais.getSecrets().entrySet()) {
+                secretosCombinados.put(entry.getKey(), new Credencial(entry.getValue()));
             }
         }
 
-        // Podrías guardar secretsPorPais como un atributo si quieres accederlo luego
+        // 4. Guardar secretos por país
+        secretsPorPais.put(pais.getCode(), secretosCombinados);
+        todas.addAll(secretosCombinados.values());
     }
 
-    private KeyVaultSecret getKeyVaultSecret(String nombre) {
-        return keyVaultService.getSecret(nombre);
-    }
+    // 5. Agrupar por client_id y enriquecer con token y api_key desde Key Vault
+    Map<String, List<Credencial>> porCliente = todas.stream()
+        .collect(Collectors.groupingBy(Credencial::getClientId));
 
-    @Data
-    public static class Pais {
-        private String code;
-        private Map<String, Credencial> secrets;
-    }
+    for (var entry : porCliente.entrySet()) {
+        String clienteId = entry.getKey();
+        KeyVaultSecret token = getKeyVaultSecret(String.format(EXTERNAL_SERVICE_TOKEN_APP, clienteId));
+        KeyVaultSecret apiKey = getKeyVaultSecret(String.format(EXTERNAL_SERVICE_X_API_KEY, clienteId));
 
-    @Data
-    public static class Credencial {
-        @JsonProperty("client_id")
-        private String clientId;
-
-        @JsonProperty("api_key")
-        private String apiKey;
-
-        private String tokenAplicacion;
+        for (Credencial c : entry.getValue()) {
+            c.setTokenAplicacion(token.getValue());
+            c.setApiKey(apiKey.getValue());
+        }
     }
 }
 
