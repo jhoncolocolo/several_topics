@@ -1,5 +1,5 @@
 ```
- import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Test;
 import org.yaml.snakeyaml.Yaml;
 
 import java.io.InputStream;
@@ -30,14 +30,14 @@ public class CargaYamlListaObjetosTest {
                 Map.of(
                         "code", "default",
                         "secrets", Map.of(
-                                "module_one", Map.of("cliente_id", 1, "apikey", "miApi1"),
-                                "module_dos", Map.of("cliente_id", 2, "apikey", "miApi2")
+                                "module_one", Map.of("cliente_id", "1", "apikey", "miApi1"),
+                                "module_dos", Map.of("cliente_id", "2", "apikey", "miApi2")
                         )
                 ),
                 Map.of(
                         "code", "CO",
                         "secrets", Map.of(
-                                "module_dos", Map.of("cliente_id", 9, "apikey", "miApi9")
+                                "module_dos", Map.of("cliente_id", "9", "apikey", "miApi9")
                         )
                 )
         );
@@ -68,11 +68,11 @@ public class CargaYamlListaObjetosTest {
         // 4. Define la lista esperada de objetos Pais
         List<Pais> paisesEsperados = List.of(
                 new Pais("default", Map.of(
-                        "module_one", new Credential(1, "miApi1"),
-                        "module_dos", new Credential(2, "miApi2")
+                        "module_one", new Credential("1", "miApi1"),
+                        "module_dos", new Credential("2", "miApi2")
                 )),
                 new Pais("CO", Map.of(
-                        "module_dos", new Credential(9, "miApi9")
+                        "module_dos", new Credential("9", "miApi9")
                 ))
         );
 
@@ -100,8 +100,7 @@ public class CargaYamlListaObjetosTest {
                 .collect(Collectors.toMap(
                         Map.Entry::getKey,
                         entry -> {
-                            Map<String, Object> credentialMap = entry.getValue();
-                            Integer clienteId = (Integer) credentialMap.get("cliente_id");
+                            String clienteId = (String) credentialMap.get("cliente_id");
                             String apiKey = (String) credentialMap.get("apikey");
                             return new Credential(clienteId, apiKey);
                         }
@@ -163,22 +162,22 @@ public class CargaYamlListaObjetosTest {
 
     // Clase para representar las credenciales
     public static class Credential {
-        private Integer clienteId;  // Cambiado a Integer para que coincida con el YAML
+        private String clienteId;
         private String apiKey;
 
         public Credential() {
         }
 
-        public Credential(Integer clienteId, String apiKey) {
+        public Credential(String clienteId, String apiKey) {
             this.clienteId = clienteId;
             this.apiKey = apiKey;
         }
 
-        public Integer getClienteId() {
+        public String getClienteId() {
             return clienteId;
         }
 
-        public void setClienteId(Integer clienteId) {
+        public void setClienteId(String clienteId) {
             this.clienteId = clienteId;
         }
 
@@ -206,14 +205,27 @@ public class CargaYamlListaObjetosTest {
         @Override
         public String toString() {
             return "Credential{" +
-                    "clienteId=" + clienteId +
+                    "clienteId='" + clienteId + '\'' +
                     ", apiKey='" + apiKey + '\'' +
                     '}';
         }
     }
 }
 
-
+countries:
+  - code: default
+    secrets:
+      module_one:
+        cliente_id: "1"
+        apikey: "miApi1"
+      module_dos:
+        cliente_id: "2"
+        apikey: "miApi2"
+  - code: CO
+    secrets:
+      module_dos:
+        cliente_id: "9"
+        apikey: "miApi9"
 ```
 
 
