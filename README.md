@@ -1,48 +1,112 @@
 ```
-public void setCountries(List<Pais> countries) {
-    this.countries = countries;
+import com.azure.security.keyvault.secrets.models.KeyVaultSecret;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
-    // 1. Obtener los secretos del país default
-    Map<String, Credencial> secretosDefault = countries.stream()
-        .filter(p -> DEFAULT.equals(p.getCode()))
-        .findFirst()
-        .map(Pais::getSecrets)
-        .orElse(Map.of());
+import java.util.*;
 
-    List<Credencial> todas = new ArrayList<>();
+import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.Mockito.*;
 
-    for (Pais pais : countries) {
-        Map<String, Credencial> secretosCombinados = new HashMap<>();
+class ModuloCredencialConfiguracionTest {
 
-        // 2. Heredar secretos del default (copiamos para evitar referencias compartidas)
-        for (Map.Entry<String, Credencial> entry : secretosDefault.entrySet()) {
-            secretosCombinados.put(entry.getKey(), new Credencial(entry.getValue()));
-        }
+    private KeyVaultService keyVaultService;
+    private ModuloCredencialConfiguracion moduloConfig;
 
-        // 3. Sobrescribir con los secretos propios del país
-        if (pais.getSecrets() != null) {
-            for (Map.Entry<String, Credencial> entry : pais.getSecrets().entrySet()) {
-                secretosCombinados.put(entry.getKey(), new Credencial(entry.getValue()));
-            }
-        }
-
-        // 4. Guardar secretos por país
-        secretsPorPais.put(pais.getCode(), secretosCombinados);
-        todas.addAll(secretosCombinados.values());
+    @BeforeEach
+    void setUp() {
+        keyVaultService = mock(KeyVaultService.class);
+        moduloConfig = new ModuloCredencialConfiguracion(keyVaultService);
     }
 
-    // 5. Agrupar por client_id y enriquecer con token y api_key desde Key Vault
-    Map<String, List<Credencial>> porCliente = todas.stream()
-        .collect(Collectors.groupingBy(Credencial::getClientId));
+    @Test
+    void testSetCountriesConHerenciaYEnriquecimiento() {
+        List<Pais> countries = new ArrayList<>();
 
-    for (var entry : porCliente.entrySet()) {
-        String clienteId = entry.getKey();
-        KeyVaultSecret token = getKeyVaultSecret(String.format(EXTERNAL_SERVICE_TOKEN_APP, clienteId));
-        KeyVaultSecret apiKey = getKeyVaultSecret(String.format(EXTERNAL_SERVICE_X_API_KEY, clienteId));
+        // default
+        countries.add(new Pais("default", Map.of(
+                "modulo5", crearCredencial("888", "rutaDefault")
+        )));
 
-        for (Credencial c : entry.getValue()) {
-            c.setTokenAplicacion(token.getValue());
-            c.setApiKey(apiKey.getValue());
+        // Panamá
+        countries.add(new Pais("PA", Map.of(
+                "modulo1", crearCredencial("123", "ruta1"),
+                "modulo2", crearCredencial("123", "ruta2"),
+                "modulo3", crearCredencial("456", "ruta3")
+        )));
+
+        // Costa Rica, sin todos los módulos
+        countries.add(new Pais("CR", Map.of(
+                "modulo4", crearCredencial("999", "rutaX")
+        )));
+
+        // Mocks
+        mockSecrets("123", "TOKEN123", "API123");
+        mockSecrets("456", "TOKEN456", "API456");
+        mockSecrets("999", "TOKEN999", "API999");
+        mockSecrets("888", "TOKEN888", "API888");
+
+        // Ejecutar
+        moduloConfig.setCountries(countries);
+
+        // Verificar llamadas al KeyVault
+        verify(keyVaultService, times(1)).getKeyVaultService("ext_serv-token-app-123");
+        verify(keyVaultService, times(1)).getKeyVaultService("ext_serv-x-api-key-123");
+
+        verify(keyVaultService, times(1)).getKeyVaultService("ext_serv-token-app-456");
+        verify(keyVaultService, times(1)).getKeyVaultService("ext_serv-x-api-key-456");
+
+        verify(keyVaultService, times(1)).getKeyVaultService("ext_serv-token-app-999");
+        verify(keyVaultService, times(1)).getKeyVaultService("ext_serv-x-api-key-999");
+
+        verify(keyVaultService, times(1)).getKeyVaultService("ext_serv-token-app-888");
+        verify(keyVaultService, times(1)).getKeyVaultService("ext_serv-x-api-key-888");
+
+        // Validación: módulo propio
+        var credPA = moduloConfig.getSecretsPorPais().get("PA").get("modulo1");
+        assertEquals("TOKEN123", credPA.getTokenAplicacion());
+        assertEquals("API123", credPA.getApiKey());
+
+        // Validación: otro cliente_id
+        var credPA456 = moduloConfig.getSecretsPorPais().get("PA").get("modulo3");
+        assertEquals("TOKEN456", credPA456.getTokenAplicacion());
+
+        // Validación: módulo heredado desde default
+        var credDefaultCR = moduloConfig.getSecretsPorPais().get("CR").get("modulo5");
+        assertEquals("TOKEN888", credDefaultCR.getTokenAplicacion());
+        assertEquals("API888", credDefaultCR.getApiKey());
+    }
+
+    private ModuloCredencialConfiguracion.Credencial crearCredencial(String clienteId, String ruta) {
+        var cred = new ModuloCredencialConfiguracion.Credencial();
+        cred.setCliente_id(clienteId);
+        cred.setRuta(ruta);
+        return cred;
+    }
+
+    private void mockSecrets(String clienteId, String token, String apiKey) {
+        when(keyVaultService.getKeyVaultService("ext_serv-token-app-" + clienteId))
+                .thenReturn(new KeyVaultSecret("ext_serv-token-app-" + clienteId, token));
+        when(keyVaultService.getKeyVaultService("ext_serv-x-api-key-" + clienteId))
+                .thenReturn(new KeyVaultSecret("ext_serv-x-api-key-" + clienteId, apiKey));
+    }
+
+    // Clase auxiliar simulada
+    static class Pais {
+        private final String code;
+        private final Map<String, ModuloCredencialConfiguracion.Credencial> secrets;
+
+        public Pais(String code, Map<String, ModuloCredencialConfiguracion.Credencial> secrets) {
+            this.code = code;
+            this.secrets = secrets;
+        }
+
+        public String getCode() {
+            return code;
+        }
+
+        public Map<String, ModuloCredencialConfiguracion.Credencial> getSecrets() {
+            return secrets;
         }
     }
 }
