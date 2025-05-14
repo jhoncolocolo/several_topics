@@ -1,5 +1,5 @@
 ```
- import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Test;
 import org.yaml.snakeyaml.Yaml;
 
 import java.io.InputStream;
@@ -16,31 +16,44 @@ public class CargaYamlListaObjetosTest {
 
     @Test
     void cargarListaDePaisesDesdeYaml() {
-        // ... (El primer test se mantiene igual, no necesita cambios para este requerimiento) ...
-        InputStream inputStream = this.getClass().getClassLoader().getResourceAsStream("paises.yml");
-        assertNotNull(inputStream, "No se pudo encontrar el archivo paises.yml");
+        // 1. Obtiene el InputStream del archivo YAML desde el classpath
+        InputStream inputStream = this.getClass().getClassLoader().getResourceAsStream("modules.yml");
+        assertNotNull(inputStream, "No se pudo encontrar el archivo modules.yml");
+
+        // 2. Crea una instancia de Yaml
         Yaml yaml = new Yaml();
-        Map<String, List<Map<String, Object>>> data = yaml.load(inputStream);
+
+        // 3. Carga el contenido del YAML.  Ahora esperamos un Map con "modules" y luego "countries"
+        Map<String, Object> data = yaml.load(inputStream);
         assertNotNull(data, "No se pudo cargar el contenido del YAML");
-        assertTrue(data.containsKey("countries"), "El YAML no contiene la clave 'countries'");
-        List<Map<String, Object>> countriesCargados = data.get("countries");
+        assertTrue(data.containsKey("modules"), "El YAML no contiene la clave 'modules'");
+
+        Map<String, Object> modules = (Map<String, Object>) data.get("modules");
+        assertNotNull(modules, "El YAML no contiene la clave 'modules'");
+        assertTrue(modules.containsKey("countries"), "El YAML no contiene la clave 'countries' dentro de 'modules'");
+
+        List<Map<String, Object>> countriesCargados = (List<Map<String, Object>>) modules.get("countries");
         assertNotNull(countriesCargados, "La lista de países no debería ser nula");
         assertEquals(2, countriesCargados.size(), "El número de países cargados no es el esperado");
+
+        // 4. Define la estructura esperada
         List<Map<String, Object>> countriesEsperados = List.of(
                 Map.of(
                         "code", "default",
                         "secrets", Map.of(
-                                "module_one", Map.of("cliente_id", "1", "apikey", "miApi1"),
-                                "module_dos", Map.of("cliente_id", "2", "apikey", "miApi2")
+                                "module_one", Map.of("client_id", "1", "api_key", "miApi1"),
+                                "module_dos", Map.of("client_id", "2", "api_key", "miApi2")
                         )
                 ),
                 Map.of(
                         "code", "CO",
                         "secrets", Map.of(
-                                "module_dos", Map.of("cliente_id", "9", "apikey", "miApi9")
+                                "module_dos", Map.of("client_id", "9", "api_key", "miApi9")
                         )
                 )
         );
+
+        // 5. Realiza las aserciones para verificar la carga correcta
         assertEquals(countriesEsperados.size(), countriesCargados.size(), "El tamaño de la lista de países no coincide");
         for (int i = 0; i < countriesEsperados.size(); i++) {
             assertEquals(countriesEsperados.get(i), countriesCargados.get(i), "El país en el índice " + i + " no coincide");
@@ -50,19 +63,21 @@ public class CargaYamlListaObjetosTest {
     @Test
     void cargarListaDePaisesComoObjetos() {
         // 1. Obtiene el InputStream del archivo YAML
-        InputStream inputStream = this.getClass().getClassLoader().getResourceAsStream("paises.yml");
-        assertNotNull(inputStream, "No se pudo encontrar el archivo paises.yml");
+        InputStream inputStream = this.getClass().getClassLoader().getResourceAsStream("modules.yml");
+        assertNotNull(inputStream, "No se pudo encontrar el archivo modules.yml");
 
         // 2. Crea una instancia de Yaml
         Yaml yaml = new Yaml();
 
-        // 3. Carga el contenido del YAML directamente como un Map y luego extrae la lista
-        Map<String, List<Map<String, Object>>> data = yaml.load(inputStream);
+        // 3. Carga el contenido del YAML y navega a la lista de países
+        Map<String, Object> data = yaml.load(inputStream);
         assertNotNull(data, "No se pudo cargar el contenido del YAML");
-        assertTrue(data.containsKey("countries"), "El YAML no contiene la clave 'countries'");
 
-        List<Map<String, Object>> countriesData = data.get("countries");
-        assertNotNull(countriesData, "La lista de países cargados no debería ser nula");
+        Map<String, Object> modules = (Map<String, Object>) data.get("modules");
+        assertNotNull(modules, "No se encontró la sección 'modules' en el YAML");
+
+        List<Map<String, Object>> countriesData = (List<Map<String, Object>>) modules.get("countries");
+        assertNotNull(countriesData, "No se encontró la lista de 'countries' en el YAML");
         assertEquals(2, countriesData.size(), "El número de países cargados no es el esperado");
 
         // 4. Define la lista esperada de objetos Pais
@@ -101,9 +116,9 @@ public class CargaYamlListaObjetosTest {
                         Map.Entry::getKey,
                         entry -> {
                             Map<String, Object> credentialMap = entry.getValue();
-                            String clienteId = (String) credentialMap.get("cliente_id");
-                            String apiKey = (String) credentialMap.get("apikey");
-                            return new Credential(clienteId, apiKey);
+                            String clientId = (String) credentialMap.get("client_id");
+                            String apiKey = (String) credentialMap.get("api_key");
+                            return new Credential(clientId, apiKey);
                         }
                 ));
         pais.setSecrets(secrets);
@@ -163,31 +178,31 @@ public class CargaYamlListaObjetosTest {
 
     // Clase para representar las credenciales
     public static class Credential {
-        private String clienteId;
-        private String apiKey;
+        private String client_id;
+        private String api_key;
 
         public Credential() {
         }
 
-        public Credential(String clienteId, String apiKey) {
-            this.clienteId = clienteId;
-            this.apiKey = apiKey;
+        public Credential(String client_id, String api_key) {
+            this.client_id = client_id;
+            this.api_key = api_key;
         }
 
-        public String getClienteId() {
-            return clienteId;
+        public String getClient_id() {
+            return client_id;
         }
 
-        public void setClienteId(String clienteId) {
-            this.clienteId = clienteId;
+        public void setClient_id(String client_id) {
+            this.client_id = client_id;
         }
 
-        public String getApiKey() {
-            return apiKey;
+        public String getApi_key() {
+            return api_key;
         }
 
-        public void setApiKey(String apiKey) {
-            this.apiKey = apiKey;
+        public void setApi_key(String api_key) {
+            this.api_key = api_key;
         }
 
         @Override
@@ -195,40 +210,41 @@ public class CargaYamlListaObjetosTest {
             if (this == o) return true;
             if (o == null || getClass() != o.getClass()) return false;
             Credential that = (Credential) o;
-            return Objects.equals(clienteId, that.clienteId) && Objects.equals(apiKey, that.apiKey);
+            return Objects.equals(client_id, that.client_id) && Objects.equals(api_key, that.api_key);
         }
 
         @Override
         public int hashCode() {
-            return Objects.hash(clienteId, apiKey);
+            return Objects.hash(client_id, api_key);
         }
 
         @Override
         public String toString() {
             return "Credential{" +
-                    "clienteId='" + clienteId + '\'' +
-                    ", apiKey='" + apiKey + '\'' +
+                    "client_id='" + client_id + '\'' +
+                    ", api_key='" + api_key + '\'' +
                     '}';
         }
     }
 }
 
+modules:
+  countries:
+    - code: default
+      secrets:
+        module_one:
+          client_id: "1"
+          api_key: "miApi1"
+        module_dos:
+          client_id: "2"
+          api_key: "miApi2"
+    - code: CO
+      secrets:
+        module_dos:
+          client_id: "9"
+          api_key: "miApi9"
 
 
-countries:
-  - code: default
-    secrets:
-      module_one:
-        cliente_id: "1"
-        apikey: "miApi1"
-      module_dos:
-        cliente_id: "2"
-        apikey: "miApi2"
-  - code: CO
-    secrets:
-      module_dos:
-        cliente_id: "9"
-        apikey: "miApi9"
 ```
 
 
