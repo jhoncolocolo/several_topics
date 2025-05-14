@@ -1,5 +1,5 @@
 ```
-import org.junit.jupiter.api.Test;
+ import org.junit.jupiter.api.Test;
 import org.yaml.snakeyaml.Yaml;
 
 import java.io.InputStream;
@@ -100,6 +100,7 @@ public class CargaYamlListaObjetosTest {
                 .collect(Collectors.toMap(
                         Map.Entry::getKey,
                         entry -> {
+                            Map<String, Object> credentialMap = entry.getValue();
                             String clienteId = (String) credentialMap.get("cliente_id");
                             String apiKey = (String) credentialMap.get("apikey");
                             return new Credential(clienteId, apiKey);
@@ -211,6 +212,8 @@ public class CargaYamlListaObjetosTest {
         }
     }
 }
+
+
 
 countries:
   - code: default
