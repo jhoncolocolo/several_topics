@@ -1,116 +1,56 @@
 ```
-import com.azure.security.keyvault.secrets.models.KeyVaultSecret;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
+ Problema detectado
+La configuración original leía un único conjunto de credenciales o secretos de servicio desde un archivo YAML sin contemplar diferencias por país. Esto limitaba la capacidad del sistema para manejar entornos multi-país, ya que todos los módulos compartían un único conjunto de secretos, lo que causaba:
 
-import java.util.*;
+Dificultad para operar con servicios externos que requieren tokens o API keys diferentes por país.
 
-import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.Mockito.*;
+Riesgo de colisión o mezcla de credenciales, especialmente si se reusaban nombres de módulo entre países.
 
-class ModuloCredencialConfiguracionTest {
+Poca escalabilidad y flexibilidad ante nuevas necesidades regionales.
 
-    private KeyVaultService keyVaultService;
-    private ModuloCredencialConfiguracion moduloConfig;
+Además, el código original no tenía una forma clara de heredar valores por defecto ni de sobrescribirlos de forma controlada según el país.
 
-    @BeforeEach
-    void setUp() {
-        keyVaultService = mock(KeyVaultService.class);
-        moduloConfig = new ModuloCredencialConfiguracion(keyVaultService);
-    }
+✅ Solución implementada
+La clase fue refactorizada para incorporar una estructura jerárquica de configuración por país, representada con objetos Pais, cada uno con su propio Map<String, Credencial> secrets.
 
-    @Test
-    void testSetCountriesConHerenciaYEnriquecimiento() {
-        List<Pais> countries = new ArrayList<>();
+Se implementaron las siguientes mejoras clave:
 
-        // default
-        countries.add(new Pais("default", Map.of(
-                "modulo5", crearCredencial("888", "rutaDefault")
-        )));
+Carga jerárquica de secretos por país:
 
-        // Panamá
-        countries.add(new Pais("PA", Map.of(
-                "modulo1", crearCredencial("123", "ruta1"),
-                "modulo2", crearCredencial("123", "ruta2"),
-                "modulo3", crearCredencial("456", "ruta3")
-        )));
+Se identifica un país default, cuyas credenciales sirven como base.
 
-        // Costa Rica, sin todos los módulos
-        countries.add(new Pais("CR", Map.of(
-                "modulo4", crearCredencial("999", "rutaX")
-        )));
+Cada país puede sobrescribir o extender esas credenciales sin afectar a otros.
 
-        // Mocks
-        mockSecrets("123", "TOKEN123", "API123");
-        mockSecrets("456", "TOKEN456", "API456");
-        mockSecrets("999", "TOKEN999", "API999");
-        mockSecrets("888", "TOKEN888", "API888");
+Estrategia de herencia controlada:
 
-        // Ejecutar
-        moduloConfig.setCountries(countries);
+Se clona el mapa de secretos del país por defecto para cada país, evitando referencias compartidas y efectos colaterales.
 
-        // Verificar llamadas al KeyVault
-        verify(keyVaultService, times(1)).getKeyVaultService("ext_serv-token-app-123");
-        verify(keyVaultService, times(1)).getKeyVaultService("ext_serv-x-api-key-123");
+Se sobrescriben claves específicas si el país define sus propios secretos.
 
-        verify(keyVaultService, times(1)).getKeyVaultService("ext_serv-token-app-456");
-        verify(keyVaultService, times(1)).getKeyVaultService("ext_serv-x-api-key-456");
+Enriquecimiento dinámico con secretos sensibles desde Azure Key Vault:
 
-        verify(keyVaultService, times(1)).getKeyVaultService("ext_serv-token-app-999");
-        verify(keyVaultService, times(1)).getKeyVaultService("ext_serv-x-api-key-999");
+Se agrupan todas las credenciales por clientId.
 
-        verify(keyVaultService, times(1)).getKeyVaultService("ext_serv-token-app-888");
-        verify(keyVaultService, times(1)).getKeyVaultService("ext_serv-x-api-key-888");
+Para cada clientId, se recuperan de Key Vault el token de aplicación y la API key.
 
-        // Validación: módulo propio
-        var credPA = moduloConfig.getSecretsPorPais().get("PA").get("modulo1");
-        assertEquals("TOKEN123", credPA.getTokenAplicacion());
-        assertEquals("API123", credPA.getApiKey());
+Se asignan esos valores a todas las credenciales asociadas.
 
-        // Validación: otro cliente_id
-        var credPA456 = moduloConfig.getSecretsPorPais().get("PA").get("modulo3");
-        assertEquals("TOKEN456", credPA456.getTokenAplicacion());
+Validaciones contra null y mejora de resiliencia:
 
-        // Validación: módulo heredado desde default
-        var credDefaultCR = moduloConfig.getSecretsPorPais().get("CR").get("modulo5");
-        assertEquals("TOKEN888", credDefaultCR.getTokenAplicacion());
-        assertEquals("API888", credDefaultCR.getApiKey());
-    }
+Se agregaron validaciones para evitar NullPointerException si Key Vault no devuelve valores.
 
-    private ModuloCredencialConfiguracion.Credencial crearCredencial(String clienteId, String ruta) {
-        var cred = new ModuloCredencialConfiguracion.Credencial();
-        cred.setCliente_id(clienteId);
-        cred.setRuta(ruta);
-        return cred;
-    }
+Se loguean advertencias si no se encuentran los secretos esperados.
 
-    private void mockSecrets(String clienteId, String token, String apiKey) {
-        when(keyVaultService.getKeyVaultService("ext_serv-token-app-" + clienteId))
-                .thenReturn(new KeyVaultSecret("ext_serv-token-app-" + clienteId, token));
-        when(keyVaultService.getKeyVaultService("ext_serv-x-api-key-" + clienteId))
-                .thenReturn(new KeyVaultSecret("ext_serv-x-api-key-" + clienteId, apiKey));
-    }
+🎯 Beneficios logrados
+Soporte nativo para múltiples países en la configuración de secretos.
 
-    // Clase auxiliar simulada
-    static class Pais {
-        private final String code;
-        private final Map<String, ModuloCredencialConfiguracion.Credencial> secrets;
+Aislamiento seguro y controlado de credenciales por país.
 
-        public Pais(String code, Map<String, ModuloCredencialConfiguracion.Credencial> secrets) {
-            this.code = code;
-            this.secrets = secrets;
-        }
+Mayor escalabilidad al permitir añadir países sin duplicar lógica.
 
-        public String getCode() {
-            return code;
-        }
+Mejora de la seguridad, al separar los valores estáticos (YAML) de los secretos sensibles (Key Vault).
 
-        public Map<String, ModuloCredencialConfiguracion.Credencial> getSecrets() {
-            return secrets;
-        }
-    }
-}
-
+Mayor resiliencia y facilidad para depuración ante fallos de configuración.
 ```
 
 
