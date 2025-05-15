@@ -1,56 +1,88 @@
 ```
- Problema detectado
-La configuración original leía un único conjunto de credenciales o secretos de servicio desde un archivo YAML sin contemplar diferencias por país. Esto limitaba la capacidad del sistema para manejar entornos multi-país, ya que todos los módulos compartían un único conjunto de secretos, lo que causaba:
+# Propuesta de mejora: Soporte para configuración de secretos por país
 
-Dificultad para operar con servicios externos que requieren tokens o API keys diferentes por país.
+## 📌 Contexto
 
-Riesgo de colisión o mezcla de credenciales, especialmente si se reusaban nombres de módulo entre países.
+Actualmente, la aplicación lee un archivo de configuración YAML que contiene un conjunto de secretos utilizados por diferentes módulos funcionales. Sin embargo, esta estructura está diseñada para trabajar con un único conjunto de secretos globales, lo cual presenta limitaciones cuando se desea operar en un entorno multi-país donde los valores sensibles, como `clientId`, `apiKey` o `ruta`, pueden variar por región o país.
 
-Poca escalabilidad y flexibilidad ante nuevas necesidades regionales.
+---
 
-Además, el código original no tenía una forma clara de heredar valores por defecto ni de sobrescribirlos de forma controlada según el país.
+## ❗ Problema identificado
 
-✅ Solución implementada
-La clase fue refactorizada para incorporar una estructura jerárquica de configuración por país, representada con objetos Pais, cada uno con su propio Map<String, Credencial> secrets.
+La configuración actual no permite distinguir ni aplicar secretos personalizados por país, lo que genera los siguientes inconvenientes:
 
-Se implementaron las siguientes mejoras clave:
+- No se pueden definir `clientId` o `token` distintos por país para un mismo módulo.
+- La estructura global limita la escalabilidad y flexibilidad para nuevas regiones.
+- No existe una herencia clara de valores comunes que puedan sobreescribirse de forma controlada.
 
-Carga jerárquica de secretos por país:
+---
 
-Se identifica un país default, cuyas credenciales sirven como base.
+## ⚠️ Consecuencias
 
-Cada país puede sobrescribir o extender esas credenciales sin afectar a otros.
+### Consecuencias negativas del enfoque actual
 
-Estrategia de herencia controlada:
+- 🔁 **Duplicación de lógica** para manejar variaciones regionales manualmente.
+- 💥 **Errores de configuración** por sobrescritura no controlada de claves entre países.
+- 🚫 **Imposibilidad de crecimiento** a nuevas regiones sin refactorizar código.
+- 🔒 **Riesgo de seguridad** si las credenciales se mezclan o se reutilizan de forma incorrecta.
 
-Se clona el mapa de secretos del país por defecto para cada país, evitando referencias compartidas y efectos colaterales.
+### Consecuencias positivas esperadas con la nueva solución
 
-Se sobrescriben claves específicas si el país define sus propios secretos.
+- 🌍 Soporte natural para múltiples países y regiones.
+- 🧬 Herencia de valores comunes desde un país base (`default`) con posibilidad de sobrescritura por país.
+- 🔐 Seguridad reforzada: las credenciales son únicas por país y se enriquecen desde Azure Key Vault.
+- 🧩 Estructura extensible y fácil de mantener a largo plazo.
+- 🧪 Mejora de la cobertura y claridad en pruebas unitarias.
 
-Enriquecimiento dinámico con secretos sensibles desde Azure Key Vault:
+---
 
-Se agrupan todas las credenciales por clientId.
+## 🔁 Opciones consideradas
 
-Para cada clientId, se recuperan de Key Vault el token de aplicación y la API key.
+### 1. **Seguir con estructura global actual**
+- ✅ Sin cambios estructurales.
+- ❌ No resuelve el problema de multi-país.
+- ❌ Alto riesgo de errores con múltiples entornos.
 
-Se asignan esos valores a todas las credenciales asociadas.
+### 2. **Crear un archivo YAML por país**
+- ✅ Separa claramente las configuraciones.
+- ❌ Mayor complejidad de mantenimiento.
+- ❌ No permite herencia ni valores comunes.
+- ❌ Requiere lógica adicional para cargar múltiples archivos.
 
-Validaciones contra null y mejora de resiliencia:
+### 3. ✅ **(Propuesta actual) Refactor a estructura por país con herencia**
+- ✅ Un solo archivo YAML estructurado por país.
+- ✅ Herencia automática desde `default`.
+- ✅ Enriquecimiento dinámico con Key Vault.
+- ✅ Flexible, seguro y escalable.
 
-Se agregaron validaciones para evitar NullPointerException si Key Vault no devuelve valores.
+---
 
-Se loguean advertencias si no se encuentran los secretos esperados.
+## ✅ Propuesta
 
-🎯 Beneficios logrados
-Soporte nativo para múltiples países en la configuración de secretos.
+Implementar una estructura de configuración basada en una lista de países (`countries`), donde cada uno tenga su propio mapa de secretos (`Map<String, Credencial>`). La clave `default` contendrá los valores comunes y será usada como base para heredar valores que no estén definidos en los demás países.
 
-Aislamiento seguro y controlado de credenciales por país.
+Los secretos se agruparán por `clientId` y se enriquecerán automáticamente con valores sensibles (`token`, `apiKey`) desde Azure Key Vault.
 
-Mayor escalabilidad al permitir añadir países sin duplicar lógica.
+---
 
-Mejora de la seguridad, al separar los valores estáticos (YAML) de los secretos sensibles (Key Vault).
+## 🧱 Estructura YAML propuesta
 
-Mayor resiliencia y facilidad para depuración ante fallos de configuración.
+```yaml
+countries:
+  - code: default
+    secrets:
+      modulo1:
+        clientId: abc
+        ruta: /default/ruta
+  - code: CO
+    secrets:
+      modulo1:
+        clientId: abc-co
+        ruta: /co/ruta
+  - code: MX
+    secrets:
+      # Hereda módulo1 de default
+
 ```
 
 
