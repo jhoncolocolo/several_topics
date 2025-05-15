@@ -83,6 +83,21 @@ countries:
     secrets:
       # Hereda módulo1 de default
 
+
+## 📖 Terminología
+
+| Término                                  | Definición |
+|------------------------------------------|------------|
+| **Pais (`Pais`)**                        | Objeto que representa una región o país en la configuración. Tiene un código (`code`) y un conjunto de secretos (`secrets`) asociados. |
+| **Code**                                 | Código único del país (por ejemplo: `CO`, `MX`, `default`). El código `default` se usa como base de herencia. |
+| **Secrets (`Map<String, Credencial>`)** | Mapa de secretos por módulo funcional. Cada clave representa un módulo (por ejemplo, `modulo1`), y su valor es una credencial específica. |
+| **Credencial**                           | Objeto que contiene información sensible como `clientId`, `ruta`, `token`, `apiKey`, etc. Puede enriquecerse posteriormente con secretos de Azure Key Vault. |
+| **Herencia de secretos**                 | Proceso por el cual los secretos definidos en el país `default` se copian como base para cada país específico, permitiendo sobrescribirlos si se definen en dicho país. |
+| **Enriquecimiento**                      | Acción de completar dinámicamente los secretos (`Credencial`) con datos confidenciales obtenidos desde Azure Key Vault, como tokens o API keys. |
+| **Key Vault**                            | Servicio de Azure para almacenar y recuperar secretos, claves y certificados de manera segura. |
+| **EXTERNAL_SERVICE_TOKEN_APP / EXTERNAL_SERVICE_X_API_KEY** | Constantes que representan el patrón para buscar los secretos en Key Vault, usando el `clientId`. |
+
+
 ```
 
 
