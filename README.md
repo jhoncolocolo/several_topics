@@ -97,7 +97,44 @@ countries:
 | **Key Vault**                            | Servicio de Azure para almacenar y recuperar secretos, claves y certificados de manera segura. |
 | **EXTERNAL_SERVICE_TOKEN_APP / EXTERNAL_SERVICE_X_API_KEY** | Constantes que representan el patrón para buscar los secretos en Key Vault, usando el `clientId`. |
 
+// MyServiceTest.java
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.test.context.TestPropertySource;
 
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+
+@SpringBootTest
+public class MyServiceTest {
+
+    @Autowired
+    private MyService myService;
+
+    @Test
+    @TestPropertySource(properties = {
+            "myapp.feature-enabled=true" // Forzamos el valor a true para este test
+    })
+    void testFeatureIsEnabledTrue() {
+        assertTrue(myService.isFeatureEnabled());
+    }
+
+    @Test
+    @TestPropertySource(properties = {
+            "myapp.feature-enabled=false" // Forzamos el valor a false para este test
+    })
+    void testFeatureIsEnabledFalse() {
+        assertFalse(myService.isFeatureEnabled());
+    }
+
+    @Test
+    // Si no se especifica @TestPropertySource a nivel de método,
+    // se utilizará el valor por defecto del YAML (true en este caso)
+    void testFeatureIsEnabledDefaultValue() {
+        assertTrue(myService.isFeatureEnabled());
+    }
+}
 ```
 
 
