@@ -59,4 +59,229 @@ Ruta de Primer Registro (Costo Único Inicial): Cuando un usuario no tiene plant
 Ruta sin Biometría Registrada (Costo ALTO por Transacción): Si la plantilla no está registrada y no es el primer registro (ej., el usuario no completó el primer registro), se recurre al Método OTP, que implica Envía OTP a Correo/Celular y Verificación de Identidad por OTP. Esto resulta en un Costo ALTO por Transacción.
 Ruta con Biometría Registrada (Costo BAJO por Transacción): Una vez que la Plantilla Biométrica está Registrada (sí), el usuario se Toma Selfie (Vector Biométrico Actual). Nuestro sistema Envía # Cédula + Vector de Cosmos DB + Vector Actual al Verificador de Identidades, que Compara Vectores para una Verificación de Identidad Exitosa. Esto genera un Costo BAJO por Transacción, que es el escenario deseado.
 Este diagrama y explicación deberían dar una visión clara del problema de costos actual y cómo la biometría facial, apoyada en Cosmos DB, es la solución clave para optimizar.
+
+
+import org.springframework.http.HttpEntity;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.client.RestTemplate;
+import org.springframework.boot.web.client.RestTemplateBuilder;
+import org.springframework.http.HttpHeaders; // Asumiendo que HttpHeaders es necesario
+import java.time.Duration;
+
+// Clase principal donde se encuentra el método original
+public class MyService {
+
+    // Estas variables se asumen definidas en la clase o inyectadas
+    private long connectionTimeout = 5000; // Ejemplo de valor
+    private long readTimeout = 10000;      // Ejemplo de valor
+    private String uri = "http://example.com/api"; // Ejemplo de URI
+    private HttpHeaders headers = new HttpHeaders(); // Ejemplo de headers
+
+    /**
+     * Clase interna estática que encapsula todos los parámetros para la solicitud.
+     * Utiliza el patrón Builder para una construcción flexible y legible.
+     */
+    public static class RequestParameters {
+        private String action;
+        private String modulo;
+        private Object requestBody; // Renombrado de 'request' para evitar conflictos
+        private Class<?> responseType; // Usamos Class<?> para ser más general
+        private String timeoutConnections;
+        private String tiemposLectura;
+        private String transactionId;
+        private String pais;
+
+        // Constructor privado para ser usado solo por el Builder
+        private RequestParameters(Builder builder) {
+            this.action = builder.action;
+            this.modulo = builder.modulo;
+            this.requestBody = builder.requestBody;
+            this.responseType = builder.responseType;
+            this.timeoutConnections = builder.timeoutConnections;
+            this.tiemposLectura = builder.tiemposLectura;
+            this.transactionId = builder.transactionId;
+            this.pais = builder.pais;
+        }
+
+        // Getters para acceder a los parámetros
+        public String getAction() { return action; }
+        public String getModulo() { return modulo; }
+        public Object getRequestBody() { return requestBody; }
+        public Class<?> getResponseType() { return responseType; }
+        public String getTimeoutConnections() { return timeoutConnections; }
+        public String getTiemposLectura() { return tiemposLectura; }
+        public String getTransactionId() { return transactionId; }
+        public String getPais() { return pais; }
+
+        /**
+         * Builder para construir instancias de RequestParameters.
+         */
+        public static class Builder {
+            private String action;
+            private String modulo;
+            private Object requestBody;
+            private Class<?> responseType;
+            private String timeoutConnections;
+            private String tiemposLectura;
+            private String transactionId;
+            private String pais;
+
+            // Métodos 'with' para cada parámetro, retornando el propio Builder para encadenamiento
+            public Builder withAction(String action) {
+                this.action = action;
+                return this;
+            }
+
+            public Builder withModulo(String modulo) {
+                this.modulo = modulo;
+                return this;
+            }
+
+            public Builder withRequestBody(Object requestBody) {
+                this.requestBody = requestBody;
+                return this;
+            }
+
+            public Builder withResponseType(Class<?> responseType) {
+                this.responseType = responseType;
+                return this;
+            }
+
+            public Builder withTimeoutConnections(String timeoutConnections) {
+                this.timeoutConnections = timeoutConnections;
+                return this;
+            }
+
+            public Builder withTiemposLectura(String tiemposLectura) {
+                this.tiemposLectura = tiemposLectura;
+                return this;
+            }
+
+            public Builder withTransactionId(String transactionId) {
+                this.transactionId = transactionId;
+                return this;
+            }
+
+            public Builder withPais(String pais) {
+                this.pais = pais;
+                return this;
+            }
+
+            /**
+             * Construye y retorna una nueva instancia de RequestParameters.
+             * @return Una instancia de RequestParameters.
+             */
+            public RequestParameters build() {
+                return new RequestParameters(this);
+            }
+        }
+    }
+
+    /**
+     * Método refactorizado para ejecutar una solicitud POST con RestTemplate,
+     * utilizando un objeto RequestParameters que encapsula todos los detalles de la solicitud.
+     *
+     * @param params El objeto RequestParameters que contiene todos los datos necesarios para la solicitud.
+     * @param <T> El tipo de la respuesta esperada.
+     * @return Un ResponseEntity que contiene la respuesta del servicio.
+     */
+    public <T> ResponseEntity<T> ejecutaRestTemplatePost(RequestParameters params) {
+        // otras instrucciones.. (manteniendo el contexto del código original)
+
+        // Se utilizan los getters del objeto params para acceder a los valores
+        HttpEntity<Object> entityReq = new HttpEntity<>(params.getRequestBody(), headers);
+
+        final RestTemplate restTemplate =
+                new RestTemplateBuilder()
+                        .setConnectTimeout(Duration.ofMillis(this.connectionTimeout))
+                        .setReadTimeout(Duration.ofMillis(this.readTimeout))
+                        .build();
+
+        // Se utilizan los getters del objeto params para acceder a los valores
+        return (ResponseEntity<T>) restTemplate.postForEntity(uri, entityReq, params.getResponseType());
+    }
+
+    // --- Aplicación / Ejemplo de uso ---
+    public static void main(String[] args) {
+        MyService service = new MyService();
+
+        // 1. Crear los parámetros usando el Builder
+        RequestParameters requestParams = new RequestParameters.Builder()
+                .withAction("someAction")
+                .withModulo("someModule")
+                .withRequestBody(new MyRequestBody("data1", 123)) // Objeto de ejemplo para el cuerpo de la solicitud
+                .withResponseType(String.class) // Tipo de respuesta esperado
+                .withTimeoutConnections("5000")
+                .withTiemposLectura("10000")
+                .withTransactionId("TXN12345")
+                .withPais("COL")
+                .build();
+
+        // 2. Llamar al método refactorizado con el objeto RequestParameters
+        try {
+            ResponseEntity<String> response = service.ejecutaRestTemplatePost(requestParams);
+            System.out.println("Respuesta del servicio: " + response.getBody());
+            System.out.println("Código de estado: " + response.getStatusCode());
+        } catch (Exception e) {
+            System.err.println("Error al ejecutar la solicitud: " + e.getMessage());
+        }
+
+        // Otro ejemplo con diferentes parámetros
+        RequestParameters anotherRequestParams = new RequestParameters.Builder()
+                .withAction("anotherAction")
+                .withModulo("anotherModule")
+                .withRequestBody(new AnotherRequestBody(true, "test"))
+                .withResponseType(Integer.class)
+                .withTransactionId("TXN67890")
+                .withPais("MEX")
+                // No es necesario pasar todos los parámetros si tienen valores por defecto o no son obligatorios
+                .build();
+
+        try {
+            ResponseEntity<Integer> anotherResponse = service.ejecutaRestTemplatePost(anotherRequestParams);
+            System.out.println("Otra respuesta del servicio: " + anotherResponse.getBody());
+            System.out.println("Otro código de estado: " + anotherResponse.getStatusCode());
+        } catch (Exception e) {
+            System.err.println("Error al ejecutar la segunda solicitud: " + e.getMessage());
+        }
+    }
+
+    // Clases de ejemplo para el cuerpo de la solicitud
+    static class MyRequestBody {
+        String field1;
+        int field2;
+
+        public MyRequestBody(String field1, int field2) {
+            this.field1 = field1;
+            this.field2 = field2;
+        }
+
+        @Override
+        public String toString() {
+            return "MyRequestBody{" +
+                   "field1='" + field1 + '\'' +
+                   ", field2=" + field2 +
+                   '}';
+        }
+    }
+
+    static class AnotherRequestBody {
+        boolean status;
+        String message;
+
+        public AnotherRequestBody(boolean status, String message) {
+            this.status = status;
+            this.message = message;
+        }
+
+        @Override
+        public String toString() {
+            return "AnotherRequestBody{" +
+                   "status=" + status +
+                   ", message='" + message + '\'' +
+                   '}';
+        }
+    }
+}
+
 ```
