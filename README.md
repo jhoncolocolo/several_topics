@@ -287,17 +287,19 @@ public class MyService {
 
 package com.example.myservice.request;
 
-public class RequestParameters {
+package com.example.myservice.request;
+
+public class RequestParameters<T> {
     private final String action;
     private final String modulo;
     private final Object requestBody;
-    private final Class<?> responseType;
+    private final Class<T> responseType;
     private final String timeoutConnections;
     private final String tiemposLectura;
     private final String transactionId;
     private final String pais;
 
-    private RequestParameters(Builder builder) {
+    private RequestParameters(Builder<T> builder) {
         this.action = builder.action;
         this.modulo = builder.modulo;
         this.requestBody = builder.requestBody;
@@ -311,64 +313,64 @@ public class RequestParameters {
     public String getAction() { return action; }
     public String getModulo() { return modulo; }
     public Object getRequestBody() { return requestBody; }
-    public Class<?> getResponseType() { return responseType; }
+    public Class<T> getResponseType() { return responseType; }
     public String getTimeoutConnections() { return timeoutConnections; }
     public String getTiemposLectura() { return tiemposLectura; }
     public String getTransactionId() { return transactionId; }
     public String getPais() { return pais; }
 
-    public static class Builder {
+    public static class Builder<T> {
         private String action;
         private String modulo;
         private Object requestBody;
-        private Class<?> responseType;
+        private Class<T> responseType;
         private String timeoutConnections;
         private String tiemposLectura;
         private String transactionId;
         private String pais;
 
-        public Builder withAction(String action) {
+        public Builder<T> withAction(String action) {
             this.action = action;
             return this;
         }
 
-        public Builder withModulo(String modulo) {
+        public Builder<T> withModulo(String modulo) {
             this.modulo = modulo;
             return this;
         }
 
-        public Builder withRequestBody(Object requestBody) {
+        public Builder<T> withRequestBody(Object requestBody) {
             this.requestBody = requestBody;
             return this;
         }
 
-        public Builder withResponseType(Class<?> responseType) {
+        public Builder<T> withResponseType(Class<T> responseType) {
             this.responseType = responseType;
             return this;
         }
 
-        public Builder withTimeoutConnections(String timeoutConnections) {
+        public Builder<T> withTimeoutConnections(String timeoutConnections) {
             this.timeoutConnections = timeoutConnections;
             return this;
         }
 
-        public Builder withTiemposLectura(String tiemposLectura) {
+        public Builder<T> withTiemposLectura(String tiemposLectura) {
             this.tiemposLectura = tiemposLectura;
             return this;
         }
 
-        public Builder withTransactionId(String transactionId) {
+        public Builder<T> withTransactionId(String transactionId) {
             this.transactionId = transactionId;
             return this;
         }
 
-        public Builder withPais(String pais) {
+        public Builder<T> withPais(String pais) {
             this.pais = pais;
             return this;
         }
 
-        public RequestParameters build() {
-            return new RequestParameters(this);
+        public RequestParameters<T> build() {
+            return new RequestParameters<>(this);
         }
     }
 }
