@@ -284,4 +284,94 @@ public class MyService {
     }
 }
 
+
+package com.example.myservice.request;
+
+public class RequestParameters {
+    private final String action;
+    private final String modulo;
+    private final Object requestBody;
+    private final Class<?> responseType;
+    private final String timeoutConnections;
+    private final String tiemposLectura;
+    private final String transactionId;
+    private final String pais;
+
+    private RequestParameters(Builder builder) {
+        this.action = builder.action;
+        this.modulo = builder.modulo;
+        this.requestBody = builder.requestBody;
+        this.responseType = builder.responseType;
+        this.timeoutConnections = builder.timeoutConnections;
+        this.tiemposLectura = builder.tiemposLectura;
+        this.transactionId = builder.transactionId;
+        this.pais = builder.pais;
+    }
+
+    public String getAction() { return action; }
+    public String getModulo() { return modulo; }
+    public Object getRequestBody() { return requestBody; }
+    public Class<?> getResponseType() { return responseType; }
+    public String getTimeoutConnections() { return timeoutConnections; }
+    public String getTiemposLectura() { return tiemposLectura; }
+    public String getTransactionId() { return transactionId; }
+    public String getPais() { return pais; }
+
+    public static class Builder {
+        private String action;
+        private String modulo;
+        private Object requestBody;
+        private Class<?> responseType;
+        private String timeoutConnections;
+        private String tiemposLectura;
+        private String transactionId;
+        private String pais;
+
+        public Builder withAction(String action) {
+            this.action = action;
+            return this;
+        }
+
+        public Builder withModulo(String modulo) {
+            this.modulo = modulo;
+            return this;
+        }
+
+        public Builder withRequestBody(Object requestBody) {
+            this.requestBody = requestBody;
+            return this;
+        }
+
+        public Builder withResponseType(Class<?> responseType) {
+            this.responseType = responseType;
+            return this;
+        }
+
+        public Builder withTimeoutConnections(String timeoutConnections) {
+            this.timeoutConnections = timeoutConnections;
+            return this;
+        }
+
+        public Builder withTiemposLectura(String tiemposLectura) {
+            this.tiemposLectura = tiemposLectura;
+            return this;
+        }
+
+        public Builder withTransactionId(String transactionId) {
+            this.transactionId = transactionId;
+            return this;
+        }
+
+        public Builder withPais(String pais) {
+            this.pais = pais;
+            return this;
+        }
+
+        public RequestParameters build() {
+            return new RequestParameters(this);
+        }
+    }
+}
+
+
 ```
