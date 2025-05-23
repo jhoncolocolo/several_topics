@@ -375,5 +375,59 @@ public class RequestParameters<T> {
     }
 }
 
+public class CredencialService {
+
+    private final Map<String, Map<String, ModuloCredencialConfiguracion.Credencial>> paises;
+
+    public CredencialService(Map<String, Map<String, ModuloCredencialConfiguracion.Credencial>> paises) {
+        this.paises = paises;
+    }
+
+    /**
+     * Obtiene una credencial por módulo y país.
+     * Si el país es null o vacío, busca solo en "default".
+     */
+    public ModuloCredencialConfiguracion.Credencial obtenerCredencial(String modulo, String pais) {
+        if (modulo == null || modulo.isBlank()) {
+            throw new IllegalArgumentException("El nombre del módulo no puede ser nulo o vacío");
+        }
+
+        if (pais != null && !pais.isBlank()) {
+            ModuloCredencialConfiguracion.Credencial credencial = buscarEnPais(modulo, pais);
+            if (credencial != null) {
+                return credencial;
+            }
+        }
+
+        ModuloCredencialConfiguracion.Credencial credencial = buscarEnPais(modulo, "default");
+        if (credencial != null) {
+            return credencial;
+        }
+
+        return buscarEnPais("default", "default");
+    }
+
+    /**
+     * Busca una credencial dentro del mapa de un país específico.
+     * Compara claves de país y módulo ignorando mayúsculas.
+     */
+    private ModuloCredencialConfiguracion.Credencial buscarEnPais(String modulo, String pais) {
+        String paisLower = pais.toLowerCase();
+        String moduloLower = modulo.toLowerCase();
+
+        for (Map.Entry<String, Map<String, ModuloCredencialConfiguracion.Credencial>> entryPais : paises.entrySet()) {
+            if (entryPais.getKey() != null && entryPais.getKey().toLowerCase().equals(paisLower)) {
+                Map<String, ModuloCredencialConfiguracion.Credencial> modulos = entryPais.getValue();
+                for (Map.Entry<String, ModuloCredencialConfiguracion.Credencial> entryModulo : modulos.entrySet()) {
+                    if (entryModulo.getKey() != null && entryModulo.getKey().toLowerCase().equals(moduloLower)) {
+                        return entryModulo.getValue();
+                    }
+                }
+            }
+        }
+
+        return null;
+    }
+}
 
 ```
