@@ -119,5 +119,18 @@ public class FeatureFlagService {
     }
 }
 
+private FeatureFlagsResponseView getFeatureFlag(String flagId) throws JsonProcessingException {
+    // Nombre estándar con prefijo
+    String key = ".appconfig.featureflag/" + flagId;
+
+    ConfigurationSetting setting = client.getConfigurationSetting(key, null); // label puede ser null
+
+    if (setting == null || setting.getValue() == null) {
+        return null;
+    }
+
+    // Usa tu helper para convertir el JSON a la clase
+    return HelperClassConverter.convTextToClass(setting.getValue(), FeatureFlagsResponseView.class);
+}
 
 ```
