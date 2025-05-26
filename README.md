@@ -132,7 +132,9 @@ private FeatureFlagsResponseView getFeatureFlag(String flagId) throws JsonProces
     // Usa tu helper para convertir el JSON a la clase
     return HelperClassConverter.convTextToClass(setting.getValue(), FeatureFlagsResponseView.class);
 }
-
+import com.azure.data.appconfiguration.models.FeatureFlagConfigurationSetting;
+import com.azure.data.appconfiguration.models.FeatureFlagFilter;
+import com.azure.data.appconfiguration.models.ConfigurationSetting;
 
 public void actualizarOInsertarFeatureFlag(FeatureFlagsResponseView nuevoFlag) {
     if (client == null) {
@@ -140,38 +142,47 @@ public void actualizarOInsertarFeatureFlag(FeatureFlagsResponseView nuevoFlag) {
     }
 
     try {
-        FeatureFlagConfigurationSetting featureFlagSetting;
+        FeatureFlagConfigurationSetting flagSetting;
 
         String key = ".appconfig.featureflag/" + nuevoFlag.getId();
         ConfigurationSetting existingSetting = client.getConfigurationSetting(key, null);
 
         if (existingSetting != null && existingSetting.getValue() != null) {
-            featureFlagSetting = HelperClassConverter.convTextToClass(
+            flagSetting = HelperClassConverter.convTextToClass(
                 existingSetting.getValue(), FeatureFlagConfigurationSetting.class
             );
         } else {
-            featureFlagSetting = new FeatureFlagConfigurationSetting(nuevoFlag.getId(), nuevoFlag.isEnabled());
+            flagSetting = new FeatureFlagConfigurationSetting(nuevoFlag.getId(), nuevoFlag.isEnabled());
         }
 
-        featureFlagSetting.setEnabled(nuevoFlag.isEnabled());
-        featureFlagSetting.setDescription(nuevoFlag.getDescription());
-        featureFlagSetting.setDisplayName(nuevoFlag.getDisplay_name());
-        featureFlagSetting.clearClientFilters();
+        flagSetting.setEnabled(nuevoFlag.isEnabled());
+        flagSetting.setDescription(nuevoFlag.getDescription());
+        flagSetting.setDisplayName(nuevoFlag.getDisplayName());
 
-        // Ahora sí: accedemos a conditions.client_filters
-        if (nuevoFlag.getConditions() != null && nuevoFlag.getConditions().getClient_filters() != null) {
-            for (FeatureFlagsResponseView.ClientFilter filter : nuevoFlag.getConditions().getClient_filters()) {
-                featureFlagSetting.addClientFilter(filter.getName(), filter.getParameters());
+        // ✅ Limpiar y volver a agregar filtros manualmente
+        List<FeatureFlagFilter> nuevosFiltros = new ArrayList<>();
+
+        if (nuevoFlag.getConditions() != null && nuevoFlag.getConditions().getClientFilters() != null) {
+            for (ClientFilter filtro : nuevoFlag.getConditions().getClientFilters()) {
+                FeatureFlagFilter azureFilter = new FeatureFlagFilter(filtro.getName());
+
+                if (filtro.getParameters() != null) {
+                    azureFilter.setParameters(filtro.getParameters());
+                }
+
+                nuevosFiltros.add(azureFilter);
             }
         }
 
-        client.setConfigurationSetting(featureFlagSetting);
+        flagSetting.getConditions().getClientFilters().clear(); // Limpiamos los filtros anteriores
+        flagSetting.getConditions().getClientFilters().addAll(nuevosFiltros); // Agregamos los nuevos
 
+        client.setConfigurationSetting(flagSetting);
+        System.out.println("Bandera actualizada o insertada correctamente.");
     } catch (Exception e) {
-        throw new RuntimeException("Error al insertar o actualizar feature flag", e);
+        throw new RuntimeException("Error al insertar o actualizar la feature flag", e);
     }
 }
-
 
 
 ```
