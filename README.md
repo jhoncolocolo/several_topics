@@ -134,32 +134,44 @@ private FeatureFlagsResponseView getFeatureFlag(String flagId) throws JsonProces
 }
 
 
-import com.fasterxml.jackson.databind.ObjectMapper;
-
-// ...
-
 public void actualizarOInsertarFeatureFlag(FeatureFlagsResponseView nuevoFlag) {
     if (client == null) {
         obtConexionConAppConfiguration();
     }
 
     try {
+        FeatureFlagConfigurationSetting featureFlagSetting;
+
         String key = ".appconfig.featureflag/" + nuevoFlag.getId();
+        ConfigurationSetting existingSetting = client.getConfigurationSetting(key, null);
 
-        // Serializar el nuevo flag a JSON
-        ObjectMapper mapper = new ObjectMapper();
-        String json = mapper.writeValueAsString(nuevoFlag);
+        if (existingSetting != null && existingSetting.getValue() != null) {
+            featureFlagSetting = HelperClassConverter.convTextToClass(
+                existingSetting.getValue(), FeatureFlagConfigurationSetting.class
+            );
+        } else {
+            featureFlagSetting = new FeatureFlagConfigurationSetting(nuevoFlag.getId(), nuevoFlag.isEnabled());
+        }
 
-        // Crear el setting de tipo FeatureFlag
-        FeatureFlagConfigurationSetting featureFlagSetting = new FeatureFlagConfigurationSetting(key, json);
+        featureFlagSetting.setEnabled(nuevoFlag.isEnabled());
+        featureFlagSetting.setDescription(nuevoFlag.getDescription());
+        featureFlagSetting.setDisplayName(nuevoFlag.getDisplay_name());
+        featureFlagSetting.clearClientFilters();
 
-        // Guardar o actualizar el setting
+        // Ahora sí: accedemos a conditions.client_filters
+        if (nuevoFlag.getConditions() != null && nuevoFlag.getConditions().getClient_filters() != null) {
+            for (FeatureFlagsResponseView.ClientFilter filter : nuevoFlag.getConditions().getClient_filters()) {
+                featureFlagSetting.addClientFilter(filter.getName(), filter.getParameters());
+            }
+        }
+
         client.setConfigurationSetting(featureFlagSetting);
 
     } catch (Exception e) {
         throw new RuntimeException("Error al insertar o actualizar feature flag", e);
     }
 }
+
 
 
 ```
