@@ -133,4 +133,47 @@ private FeatureFlagsResponseView getFeatureFlag(String flagId) throws JsonProces
     return HelperClassConverter.convTextToClass(setting.getValue(), FeatureFlagsResponseView.class);
 }
 
+
+/**
+     * Inserta o actualiza una feature flag en Azure App Configuration
+     *
+     * @param flagId        ID de la bandera
+     * @param description   Descripción opcional
+     * @param enabled       Estado booleano
+     * @param filters       Lista de filtros tipo Map<String, Object>
+     */
+    public void updateOrInsertFeatureFlag(String flagId, String description, boolean enabled, List<Map<String, Object>> filters) {
+        FeatureFlagConfigurationSetting flagSetting;
+
+        try {
+            // Verificamos si ya existe
+            try {
+                flagSetting = client.getFeatureFlag(flagId);
+            } catch (Exception e) {
+                flagSetting = new FeatureFlagConfigurationSetting(flagId, enabled);
+            }
+
+            // Seteamos datos básicos
+            flagSetting.setEnabled(enabled);
+            flagSetting.setDescription(description);
+            flagSetting.setDisplayName(null); // si aplica
+
+            // Agregamos condiciones (filtros)
+            flagSetting.clearClientFilters();
+            for (Map<String, Object> filter : filters) {
+                String name = (String) filter.get("name");
+                Map<String, Object> parameters = (Map<String, Object>) filter.get("parameters");
+
+                flagSetting.addClientFilter(name, parameters);
+            }
+
+            // Finalmente hacemos upsert
+            client.setConfigurationSetting(flagSetting);
+            System.out.println("Bandera actualizada o insertada correctamente.");
+
+        } catch (Exception ex) {
+            ex.printStackTrace();
+            System.err.println("Error al insertar/actualizar la bandera: " + ex.getMessage());
+        }
+    }
 ```
