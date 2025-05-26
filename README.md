@@ -134,46 +134,32 @@ private FeatureFlagsResponseView getFeatureFlag(String flagId) throws JsonProces
 }
 
 
-/**
-     * Inserta o actualiza una feature flag en Azure App Configuration
-     *
-     * @param flagId        ID de la bandera
-     * @param description   Descripción opcional
-     * @param enabled       Estado booleano
-     * @param filters       Lista de filtros tipo Map<String, Object>
-     */
-    public void updateOrInsertFeatureFlag(String flagId, String description, boolean enabled, List<Map<String, Object>> filters) {
-        FeatureFlagConfigurationSetting flagSetting;
+import com.fasterxml.jackson.databind.ObjectMapper;
 
-        try {
-            // Verificamos si ya existe
-            try {
-                flagSetting = client.getFeatureFlag(flagId);
-            } catch (Exception e) {
-                flagSetting = new FeatureFlagConfigurationSetting(flagId, enabled);
-            }
+// ...
 
-            // Seteamos datos básicos
-            flagSetting.setEnabled(enabled);
-            flagSetting.setDescription(description);
-            flagSetting.setDisplayName(null); // si aplica
-
-            // Agregamos condiciones (filtros)
-            flagSetting.clearClientFilters();
-            for (Map<String, Object> filter : filters) {
-                String name = (String) filter.get("name");
-                Map<String, Object> parameters = (Map<String, Object>) filter.get("parameters");
-
-                flagSetting.addClientFilter(name, parameters);
-            }
-
-            // Finalmente hacemos upsert
-            client.setConfigurationSetting(flagSetting);
-            System.out.println("Bandera actualizada o insertada correctamente.");
-
-        } catch (Exception ex) {
-            ex.printStackTrace();
-            System.err.println("Error al insertar/actualizar la bandera: " + ex.getMessage());
-        }
+public void actualizarOInsertarFeatureFlag(FeatureFlagsResponseView nuevoFlag) {
+    if (client == null) {
+        obtConexionConAppConfiguration();
     }
+
+    try {
+        String key = ".appconfig.featureflag/" + nuevoFlag.getId();
+
+        // Serializar el nuevo flag a JSON
+        ObjectMapper mapper = new ObjectMapper();
+        String json = mapper.writeValueAsString(nuevoFlag);
+
+        // Crear el setting de tipo FeatureFlag
+        FeatureFlagConfigurationSetting featureFlagSetting = new FeatureFlagConfigurationSetting(key, json);
+
+        // Guardar o actualizar el setting
+        client.setConfigurationSetting(featureFlagSetting);
+
+    } catch (Exception e) {
+        throw new RuntimeException("Error al insertar o actualizar feature flag", e);
+    }
+}
+
+
 ```
