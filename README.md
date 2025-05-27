@@ -145,3 +145,52 @@ public class ClientFilter {
     public void setParameters(Map<String, Object> parameters) { this.parameters = parameters; }
 }
 ```
+
+
+
+import com.azure.data.appconfiguration.ConfigurationClient;
+import com.azure.data.appconfiguration.models.FeatureFlagConfigurationSetting;
+import com.azure.data.appconfiguration.models.FeatureFlagFilter;
+import org.springframework.stereotype.Service;
+
+import java.util.List;
+import java.util.stream.Collectors;
+
+@Service
+public class FeatureFlagService {
+
+    private final ConfigurationClient configurationClient;
+
+    public FeatureFlagService(ConfigurationClient configurationClient) {
+        this.configurationClient = configurationClient;
+    }
+
+    public String actualizarFeatureFlag(String id, FeatureFlagJson flagJson) {
+        try {
+            String key = ".appconfig.featureflag/" + id;
+
+            // Convertimos los filtros personalizados a filtros Azure
+            List<FeatureFlagFilter> azureFilters = flagJson.getConditions().getClient_filters().stream()
+                    .map(f -> new FeatureFlagFilter(f.getName()).setParameters(f.getParameters()))
+                    .collect(Collectors.toList());
+
+            // Creamos el nuevo FeatureFlagConfigurationSetting
+            FeatureFlagConfigurationSetting updatedSetting =
+                    new FeatureFlagConfigurationSetting(flagJson.getId(), flagJson.isEnabled());
+
+            updatedSetting.setDescription(flagJson.getDescription());
+            updatedSetting.setDisplayName(flagJson.getDisplayName());
+            updatedSetting.setClientFilters(azureFilters);
+
+            // Establecemos el content type oficial
+            updatedSetting.setContentType("application/vnd.microsoft.appconfig.ff+json;charset=utf-8");
+
+            configurationClient.setConfigurationSetting(updatedSetting);
+            return "Feature flag actualizado correctamente.";
+        } catch (Exception e) {
+            e.printStackTrace();
+            return "Error al actualizar feature flag: " + e.getMessage();
+        }
+    }
+}
+
