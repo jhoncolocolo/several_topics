@@ -40,5 +40,47 @@ public void actualizarFeatureFlag(ConfigurationClient client, String key) {
     }
 }
 
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.web.bind.annotation.*;
+
+import com.azure.data.appconfiguration.ConfigurationClient;
+import com.azure.data.appconfiguration.models.FeatureFlagConfigurationSetting;
+import com.azure.data.appconfiguration.models.FeatureFlagFilter;
+
+import java.util.List;
+import java.util.stream.Collectors;
+
+@RestController
+@RequestMapping("/api/feature-flags")
+public class FeatureFlagController {
+
+    @Autowired
+    private ConfigurationClient configurationClient;
+
+    @PutMapping("/{featureId}")
+    public String actualizarFeatureFlag(@PathVariable String featureId, @RequestBody FeatureFlagJson featureRequest) {
+        try {
+            // Convertimos los filtros personalizados a FeatureFlagFilter (tipo de Azure)
+            List<FeatureFlagFilter> azureFilters = featureRequest.getConditions().getClient_filters().stream()
+                .map(f -> new FeatureFlagFilter(f.getName()).setParameters(f.getParameters()))
+                .collect(Collectors.toList());
+
+            // Creamos el nuevo FeatureFlagConfigurationSetting con los datos del request
+            FeatureFlagConfigurationSetting updatedSetting = new FeatureFlagConfigurationSetting(featureId, featureRequest.getEnabled());
+            updatedSetting.setDescription(featureRequest.getDescription());
+            updatedSetting.setDisplayName(featureRequest.getDisplayName());
+            updatedSetting.setClientFilters(azureFilters);
+
+            // Azure requiere este contentType para feature flags
+            updatedSetting.setContentType("application/vnd.microsoft.appconfig.ff+json;charset=utf-8");
+
+            configurationClient.setConfigurationSetting(updatedSetting);
+            return "Feature flag actualizado correctamente.";
+        } catch (Exception e) {
+            e.printStackTrace();
+            return "Error al actualizar el feature flag: " + e.getMessage();
+        }
+    }
+}
 
 ```
