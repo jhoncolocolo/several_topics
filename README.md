@@ -83,4 +83,65 @@ public class FeatureFlagController {
     }
 }
 
+✅ 1. Clase intermedia: FeatureFlagJson.java
+java
+Copiar
+Editar
+import java.util.List;
+
+public class FeatureFlagJson {
+    private String id;
+    private String description;
+    private Boolean enabled;
+    private Conditions conditions;
+    private String displayName;
+
+    // Getters y setters
+    public String getId() { return id; }
+    public void setId(String id) { this.id = id; }
+
+    public String getDescription() { return description; }
+    public void setDescription(String description) { this.description = description; }
+
+    public Boolean getEnabled() { return enabled; }
+    public void setEnabled(Boolean enabled) { this.enabled = enabled; }
+
+    public Conditions getConditions() { return conditions; }
+    public void setConditions(Conditions conditions) { this.conditions = conditions; }
+
+    public String getDisplayName() { return displayName; }
+    public void setDisplayName(String displayName) { this.displayName = displayName; }
+}
+✅ 2. Clases auxiliares: Conditions.java y ClientFilter.java
+java
+Copiar
+Editar
+import java.util.List;
+
+public class Conditions {
+    private List<ClientFilter> client_filters;
+
+    public List<ClientFilter> getClient_filters() {
+        return client_filters;
+    }
+
+    public void setClient_filters(List<ClientFilter> client_filters) {
+        this.client_filters = client_filters;
+    }
+}
+java
+Copiar
+Editar
+import java.util.Map;
+
+public class ClientFilter {
+    private String name;
+    private Map<String, Object> parameters;
+
+    public String getName() { return name; }
+    public void setName(String name) { this.name = name; }
+
+    public Map<String, Object> getParameters() { return parameters; }
+    public void setParameters(Map<String, Object> parameters) { this.parameters = parameters; }
+}
 ```
