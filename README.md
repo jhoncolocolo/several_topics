@@ -194,3 +194,110 @@ public class FeatureFlagService {
     }
 }
 
+
+import com.azure.data.appconfiguration.models.ConfigurationSetting;
+import com.fasterxml.jackson.databind.ObjectMapper;
+
+// ...
+
+public FeatureFlagJson obtenerFeatureFlagPorId(String id) {
+    try {
+        String key = ".appconfig.featureflag/" + id;
+        ConfigurationSetting setting = configurationClient.getConfigurationSetting(key, null);
+
+        if (setting == null || setting.getValue() == null) {
+            return null;
+        }
+
+        ObjectMapper mapper = new ObjectMapper();
+        return mapper.readValue(setting.getValue(), FeatureFlagJson.class);
+
+    } catch (Exception e) {
+        e.printStackTrace();
+        return null;
+    }
+}
+
+public String eliminarFeatureFlag(String id) {
+    try {
+        String key = ".appconfig.featureflag/" + id;
+        ConfigurationSetting deleted = configurationClient.deleteConfigurationSetting(key, null);
+
+        if (deleted == null) {
+            return "No se encontró el feature flag para eliminar.";
+        }
+
+        return "Feature flag eliminado correctamente.";
+    } catch (Exception e) {
+        e.printStackTrace();
+        return "Error al eliminar feature flag: " + e.getMessage();
+    }
+}
+✅ 2. Controlador: FeatureFlagController.java
+Agrega estos endpoints:
+
+java
+Copiar
+Editar
+@GetMapping("/{id}")
+public ResponseEntity<?> obtenerFeatureFlagPorId(@PathVariable String id) {
+    FeatureFlagJson flag = featureFlagService.obtenerFeatureFlagPorId(id);
+    if (flag == null) {
+        return ResponseEntity.status(HttpStatus.NOT_FOUND).body("Feature flag no encontrado.");
+    }
+    return ResponseEntity.ok(flag);
+}
+
+@DeleteMapping("/{id}")
+public ResponseEntity<String> eliminarFeatureFlag(@PathVariable String id) {
+    String resultado = featureFlagService.eliminarFeatureFlag(id);
+    if (resultado.contains("eliminado correctamente")) {
+        return ResponseEntity.ok(resultado);
+    } else {
+        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(resultado);
+    }
+}
+📬 Ejemplo de llamadas al API
+🔍 Obtener por ID
+http
+Copiar
+Editar
+GET /api/feature-flags/mi-feature-id
+Respuesta:
+
+json
+Copiar
+Editar
+{
+  "id": "mi-feature-id",
+  "enabled": true,
+  "description": "Descripción del flag",
+  "displayName": "Mi Flag",
+  "conditions": {
+    "client_filters": [
+      {
+        "name": "Microsoft.Percentage",
+        "parameters": {
+          "Value": 50
+        }
+      }
+    ]
+  }
+}
+❌ Eliminar por ID
+http
+Copiar
+Editar
+DELETE /api/feature-flags/mi-feature-id
+Respuesta exitosa:
+
+nginx
+Copiar
+Editar
+Feature flag eliminado correctamente.
+Si no se encuentra:
+
+yaml
+Copiar
+Editar
+No se encontró el feature flag para eliminar.
