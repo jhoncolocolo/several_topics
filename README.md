@@ -27,162 +27,61 @@ public class FeatureFlagServiceImplTest {
     @Test
     void testCrearOActualizarFeatureFlag_noLanzaExcepcion() {
         // Arrange
-        Map<String, Boolean> config = Map.of("CO", true);
-        ClientFilter clientFilter = new ClientFilter("countries", new Parameters(config));
-        Conditions conditions = new Conditions(List.of(clientFilter));
+        ClientFilter filtro = new ClientFilter();
+        filtro.setName("countries");
+        filtro.setParameters(Map.of("CO", "true", "PE", "true"));
+
+        FeatureFlagConfigurationConditions condiciones = new FeatureFlagConfigurationConditions();
+        condiciones.setClientFilters(List.of(filtro));
 
         FeatureFlagsResponseView flag = new FeatureFlagsResponseView(
             "nuevo-feature",
             "flag para pruebas",
             true,
-            conditions,
+            condiciones,
             "Nuevo Feature"
         );
 
-        // Act
+        // Act & Assert
         try {
             service.crearOActualizarFeatureFlag(flag);
         } catch (Exception e) {
-            assert false : "No se esperaba excepción";
+            assert false : "No se esperaba excepción: " + e.getMessage();
         }
 
-        // Assert
+        // Verifica que se haya llamado a setConfigurationSetting
         verify(mockClient, times(1)).setConfigurationSetting(any(ConfigurationSetting.class));
     }
 }
 
-import com.azure.data.appconfiguration.ConfigurationClient;
-import com.azure.data.appconfiguration.models.FeatureFlagConfigurationSetting;
-import com.azure.data.appconfiguration.models.SettingSelector;
-import com.fasterxml.jackson.databind.ObjectMapper;
 
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
 
-public class FeatureFlagService {
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.*;
 
-    private final ConfigurationClient client;
-    private final ObjectMapper objectMapper = new ObjectMapper();
+@RestController
+@RequestMapping("/api/feature-flags")
+public class FeatureFlagController {
 
-    public FeatureFlagService() {
-        this.client = getConnectionConConfiguration(); // ya lo tienes
+    private final FeatureFlagService featureFlagService;
+
+    @Autowired
+    public FeatureFlagController(FeatureFlagService featureFlagService) {
+        this.featureFlagService = featureFlagService;
     }
 
-    /**
-     * Inserta o actualiza una feature flag en Azure App Configuration
-     *
-     * @param flagId        ID de la bandera
-     * @param description   Descripción opcional
-     * @param enabled       Estado booleano
-     * @param filters       Lista de filtros tipo Map<String, Object>
-     */
-    public void updateOrInsertFeatureFlag(String flagId, String description, boolean enabled, List<Map<String, Object>> filters) {
-        FeatureFlagConfigurationSetting flagSetting;
-
+    @PostMapping
+    public ResponseEntity<String> crearOActualizarFlag(@RequestBody FeatureFlagsResponseView nuevoFlag) {
         try {
-            // Verificamos si ya existe
-            try {
-                flagSetting = client.getFeatureFlag(flagId);
-            } catch (Exception e) {
-                flagSetting = new FeatureFlagConfigurationSetting(flagId, enabled);
-            }
-
-            // Seteamos datos básicos
-            flagSetting.setEnabled(enabled);
-            flagSetting.setDescription(description);
-            flagSetting.setDisplayName(null); // si aplica
-
-            // Agregamos condiciones (filtros)
-            flagSetting.clearClientFilters();
-            for (Map<String, Object> filter : filters) {
-                String name = (String) filter.get("name");
-                Map<String, Object> parameters = (Map<String, Object>) filter.get("parameters");
-
-                flagSetting.addClientFilter(name, parameters);
-            }
-
-            // Finalmente hacemos upsert
-            client.setConfigurationSetting(flagSetting);
-            System.out.println("Bandera actualizada o insertada correctamente.");
-
-        } catch (Exception ex) {
-            ex.printStackTrace();
-            System.err.println("Error al insertar/actualizar la bandera: " + ex.getMessage());
+            featureFlagService.actualizarOInsertarFeatureFlag(nuevoFlag);
+            return ResponseEntity.ok("Feature flag actualizada/insertada correctamente.");
+        } catch (Exception e) {
+            return ResponseEntity
+                    .status(500)
+                    .body("Error al procesar la feature flag: " + e.getMessage());
         }
     }
-
-    // Este método ya lo tienes, lo incluyo solo para el contexto
-    private ConfigurationClient getConnectionConConfiguration() {
-        // Debes tener este método que devuelve ConfigurationClient
-        return null; // implementación propia
-    }
 }
-
-private FeatureFlagsResponseView getFeatureFlag(String flagId) throws JsonProcessingException {
-    // Nombre estándar con prefijo
-    String key = ".appconfig.featureflag/" + flagId;
-
-    ConfigurationSetting setting = client.getConfigurationSetting(key, null); // label puede ser null
-
-    if (setting == null || setting.getValue() == null) {
-        return null;
-    }
-
-    // Usa tu helper para convertir el JSON a la clase
-    return HelperClassConverter.convTextToClass(setting.getValue(), FeatureFlagsResponseView.class);
-}
-import com.azure.data.appconfiguration.models.FeatureFlagConfigurationSetting;
-import com.azure.data.appconfiguration.models.FeatureFlagFilter;
-import com.azure.data.appconfiguration.models.ConfigurationSetting;
-
-public void actualizarOInsertarFeatureFlag(FeatureFlagsResponseView nuevoFlag) {
-    if (client == null) {
-        obtConexionConAppConfiguration();
-    }
-
-    try {
-        FeatureFlagConfigurationSetting flagSetting;
-
-        String key = ".appconfig.featureflag/" + nuevoFlag.getId();
-        ConfigurationSetting existingSetting = client.getConfigurationSetting(key, null);
-
-        if (existingSetting != null && existingSetting.getValue() != null) {
-            flagSetting = HelperClassConverter.convTextToClass(
-                existingSetting.getValue(), FeatureFlagConfigurationSetting.class
-            );
-        } else {
-            flagSetting = new FeatureFlagConfigurationSetting(nuevoFlag.getId(), nuevoFlag.isEnabled());
-        }
-
-        flagSetting.setEnabled(nuevoFlag.isEnabled());
-        flagSetting.setDescription(nuevoFlag.getDescription());
-        flagSetting.setDisplayName(nuevoFlag.getDisplayName());
-
-        // ✅ Limpiar y volver a agregar filtros manualmente
-        List<FeatureFlagFilter> nuevosFiltros = new ArrayList<>();
-
-        if (nuevoFlag.getConditions() != null && nuevoFlag.getConditions().getClientFilters() != null) {
-            for (ClientFilter filtro : nuevoFlag.getConditions().getClientFilters()) {
-                FeatureFlagFilter azureFilter = new FeatureFlagFilter(filtro.getName());
-
-                if (filtro.getParameters() != null) {
-                    azureFilter.setParameters(filtro.getParameters());
-                }
-
-                nuevosFiltros.add(azureFilter);
-            }
-        }
-
-        flagSetting.getConditions().getClientFilters().clear(); // Limpiamos los filtros anteriores
-        flagSetting.getConditions().getClientFilters().addAll(nuevosFiltros); // Agregamos los nuevos
-
-        client.setConfigurationSetting(flagSetting);
-        System.out.println("Bandera actualizada o insertada correctamente.");
-    } catch (Exception e) {
-        throw new RuntimeException("Error al insertar o actualizar la feature flag", e);
-    }
-}
-
 
 ```
