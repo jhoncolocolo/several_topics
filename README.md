@@ -390,4 +390,7 @@ Si necesitas validar que tanto el id como la estructura de filtros están correc
 
 ¿Te gustaría que prepare también una clase de configuración de prueba (@Configuration) o ejemplos para curl o Postman?
 
+
+FeatureFlagConfigurationSetting flagSetting = mapper.treeToValue(jsonNode, FeatureFlagConfigurationSetting.class);
+
 ```
