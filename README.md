@@ -357,3 +357,157 @@ document.getElementById("featureFlagForm").addEventListener("submit", function (
 ¿Quieres que también te dé la parte de FeatureFlagService donde se implementa guardarFeatureFlag()?
 
 ```
+
+
+
+```
+<h1>Gestión de Feature Flags - Documentación Técnica</h1>
+
+<h2>📌 Descripción General</h2>
+<p>
+Este servicio en Java permite gestionar feature flags utilizando Azure App Configuration. Se pueden listar, crear, actualizar, obtener y eliminar feature flags desde una API REST expuesta con Spring Boot.
+</p>
+
+<h2>🧠 Arquitectura</h2>
+<ul>
+  <li><strong>FeatureFlagService</strong>: lógica principal para manipular feature flags.</li>
+  <li><strong>FeatureFlagController</strong>: expone endpoints HTTP para interactuar con el servicio.</li>
+  <li><strong>Modelos</strong>: <code>FeatureFlagJson</code>, <code>Conditions</code> y <code>ClientFilter</code>.</li>
+</ul>
+
+<h2>💻 Código Principal</h2>
+
+<h3>🔧 FeatureFlagService.java</h3>
+<pre><code>
+@Service
+public class FeatureFlagService {
+
+    private ConfigurationClient client;
+
+    public FeatureFlagService(ConfigurationClient client) {
+        this.client = client;
+    }
+
+    protected List<BanderasResponseView> obtBanderasAppConfiguration() throws AppConfigurationException {
+        ...
+    }
+
+    private PagedIterable<ConfigurationSetting> obtConexionConAppConfiguration() {
+        ...
+    }
+
+    public BanderasResponseView obtDatosAppConfiguration() throws AppConfigurationException {
+        ...
+    }
+
+    public String crearFeatureFlag(FeatureFlagJson flagJson) {
+        ...
+    }
+
+    public String actualizarFeatureFlag(String id, FeatureFlagJson flagJson) {
+        ...
+    }
+
+    public FeatureFlagJson obtenerFeatureFlagPorId(String id) {
+        ...
+    }
+
+    public String eliminarFeatureFlag(String id) {
+        ...
+    }
+}
+</code></pre>
+
+<h3>🌐 FeatureFlagController.java</h3>
+<pre><code>
+@RestController
+@RequestMapping("/api/feature-flags")
+public class FeatureFlagController {
+
+    @Autowired
+    private FeatureFlagService featureFlagService;
+
+    @PutMapping("/{id}")
+    public String actualizarFeatureFlag(@PathVariable String id, @RequestBody FeatureFlagJson flagJson) {
+        return featureFlagService.actualizarFeatureFlag(id, flagJson);
+    }
+
+    @PostMapping
+    public ResponseEntity&lt;String&gt; crearFeatureFlag(@RequestBody FeatureFlagJson flagJson) {
+        ...
+    }
+
+    @GetMapping("/{id}")
+    public ResponseEntity&lt;?&gt; obtenerFeatureFlagPorId(@PathVariable String id) {
+        ...
+    }
+
+    @DeleteMapping("/{id}")
+    public ResponseEntity&lt;String&gt; eliminarFeatureFlag(@PathVariable String id) {
+        ...
+    }
+}
+</code></pre>
+
+<h3>📄 FeatureFlagJson.java</h3>
+<pre><code>
+public class FeatureFlagJson {
+    private String id;
+    private String description;
+    private Boolean enabled;
+    private Conditions conditions;
+    private String displayName;
+
+    // Getters y setters
+}
+</code></pre>
+
+<h3>📄 Conditions.java</h3>
+<pre><code>
+public class Conditions {
+    private List&lt;ClientFilter&gt; client_filters;
+
+    public List&lt;ClientFilter&gt; getClient_filters() {
+        return client_filters;
+    }
+
+    public void setClient_filters(List&lt;ClientFilter&gt; client_filters) {
+        this.client_filters = client_filters;
+    }
+}
+</code></pre>
+
+<h3>📄 ClientFilter.java</h3>
+<pre><code>
+public class ClientFilter {
+    private String name;
+    private Map&lt;String, Object&gt; parameters;
+
+    public String getName() { return name; }
+    public void setName(String name) { this.name = name; }
+
+    public Map&lt;String, Object&gt; getParameters() { return parameters; }
+    public void setParameters(Map&lt;String, Object&gt; parameters) { this.parameters = parameters; }
+}
+</code></pre>
+
+<h2>🛠️ Funcionalidades Principales</h2>
+<ul>
+  <li>Obtener todos los feature flags desde Azure App Configuration.</li>
+  <li>Crear un nuevo feature flag con condiciones y filtros personalizados.</li>
+  <li>Actualizar un feature flag existente.</li>
+  <li>Consultar un feature flag por su ID.</li>
+  <li>Eliminar un feature flag por su ID.</li>
+</ul>
+
+<h2>📝 Consideraciones</h2>
+<ul>
+  <li>Utiliza credenciales seguras desde Azure Key Vault para conectarse a App Configuration.</li>
+  <li>Implementa validación para evitar duplicación de feature flags al momento de crear uno nuevo.</li>
+  <li>Utiliza el tipo de contenido oficial para los feature flags: <code>application/vnd.microsoft.appconfig.ff+json;charset=utf-8</code>.</li>
+</ul>
+
+<h2>📎 Uso como Respaldo</h2>
+<p>Esta página sirve como respaldo técnico si se pierde el código del branch. Contiene tanto la lógica de negocio como los modelos involucrados.</p>
+
+```
