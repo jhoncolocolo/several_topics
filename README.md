@@ -26,3 +26,15 @@ Integración con Servicios de Autenticación/Comparación de Vectores: Comunicac
 Gestión de Credenciales: Utiliza y gestiona las credenciales de acceso a la base de datos y a los servicios externos de forma segura (como se mencionó en la sección de Requisitos Técnicos, usando gestores de secretos).
 Manejo de errores específicos de integración con servicios externos (ej., timeouts, respuestas inesperadas).
 Esta estructura de capas proporciona una clara separación de preocupaciones, lo que facilita el desarrollo, las pruebas, el mantenimiento y la escalabilidad del Microservicio de Biometría.
+
+
+
+
+. Capa de Lógica de Negocio (Capa de Dominio)
+Descripción: Esta capa es el núcleo funcional y el "cerebro" del Microservicio de Biometría. Su propósito principal es encapsular y ejecutar la lógica central de negocio y las reglas específicas del dominio de la biometría. Recibe las solicitudes ya validadas por la Capa API y determina cómo procesarlas, aplicando las políticas y criterios definidos (como la unicidad del registro o la determinación del estado de la biometría). No se ocupa de la exposición de la API o la persistencia de datos directamente, sino que orquesta el flujo de negocio y coordina con otras capas para cumplir con la solicitud.
+Funcionalidad Clave:
+Implementa la lógica para verificarbiometria: Aquí se decide, por ejemplo, si se debe consultar la base de datos para validar la existencia o el estado de una biometría.
+Aplica las reglas de negocio para registrarbiometria: Por ejemplo, asegura la unicidad del registro biométrico por usuario/documento antes de permitir el almacenamiento, evitando duplicados innecesarios.
+Gestiona el procesamiento para consultarbiometriaPorusuario y consultarEstadobiometria: Determina qué datos son necesarios y cómo deben ser recuperados y procesados para generar la respuesta adecuada.
+Controla la ejecución de la lógica para eliminarbiometria, asegurando que el proceso se realice de acuerdo con las políticas internas.
+Coordina la interacción con la Capa de Acceso a Datos y Servicios Externos para realizar operaciones de lectura o escritura de datos, o para interactuar con servicios externos requeridos por la lógica de negocio.
