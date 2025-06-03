@@ -1,3 +1,6 @@
+Plantilla Biométrica / Vector Biométrico: Imagina que cuando una cámara (o un sensor biométrico) te toma una foto o escanea tu huella, no guarda la imagen completa. En su lugar, un software especializado extrae patrones y características únicas de esa imagen (como la distancia entre tus ojos, la forma de tu nariz, o los remolinos de tu huella dactilar). Estos patrones se transforman en una cadena de caracteres alfanuméricos (letras y números, a menudo codificada como Base64). Esta cadena es lo que llamamos la "plantilla" o "vector biométrico", una representación digital compacta y única de tu biometría, diseñada para ser comparada con otras plantillas sin necesidad de reconstruir la imagen original.
+
+
 Esta documentación está cuidadosamente diseñada para ser una guía clara y completa para un rango específico de profesionales técnicos que interactuarán con el Microservicio de Biometría.
 
 Principales Audiencias:
