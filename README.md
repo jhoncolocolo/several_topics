@@ -246,3 +246,87 @@ public class CalculatorServiceBeanTest {
 
 
 ```
+
+```
+package myproject.service;
+
+import static org.junit.Assert.*;
+import static org.mockito.Mockito.*;
+
+import java.util.Date;
+
+import org.junit.After;
+import org.junit.Before;
+import org.junit.Test;
+import org.mockito.Mock;
+import org.mockito.MockitoAnnotations;
+
+import myservice.helper.CustomCacheControllerBean;
+
+public class CalculatorServiceBeanTest {
+
+    private CalculatorServiceBean calculatorServiceBean;
+
+    @Mock
+    private CustomCacheControllerBean mockCache;
+
+    private AutoCloseable closeable;
+
+    @Before
+    public void setUp() {
+        closeable = MockitoAnnotations.openMocks(this);
+        calculatorServiceBean = new CalculatorServiceBean() {
+            @Override
+            protected boolean cacheContieneClave(String key) {
+                return mockCache.contieneClave(key);
+            }
+
+            @Override
+            protected void cachePutObject(String key, String value, String cacheTimeLifeKey) {
+                mockCache.put(key, value, cacheTimeLifeKey);
+            }
+        };
+    }
+
+    @After
+    public void tearDown() throws Exception {
+        closeable.close();
+    }
+
+    private String generateValidTOTP(String secret) throws Exception {
+        byte[] keyBytes = secret.getBytes();
+        long currentUnixTime = new Date().getTime() / 1000;
+        java.lang.reflect.Method method = CalculatorServiceBean.class.getDeclaredMethod("generateConvertedToken", byte[].class, long.class);
+        method.setAccessible(true);
+        int token = (int) method.invoke(calculatorServiceBean, keyBytes, currentUnixTime);
+        return String.format("%06d", token);
+    }
+
+    @Test
+    public void testPublicValidate_WithValidToken() throws Exception {
+        String keyWordString = "mySecretKey";
+        String codeSixDigit = generateValidTOTP(keyWordString);
+
+        when(mockCache.contieneClave(anyString())).thenReturn(false);
+        doNothing().when(mockCache).put(anyString(), anyString(), anyString());
+
+        boolean result = calculatorServiceBean.publicValidate(keyWordString, codeSixDigit);
+
+        assertTrue("Expected the token to be valid and return true", result);
+    }
+
+    @Test
+    public void testPublicValidate_WithInvalidToken() throws Exception {
+        String keyWordString = "mySecretKey";
+        String invalidCodeSixDigit = "000000"; // Deliberadamente inválido
+
+        when(mockCache.contieneClave(anyString())).thenReturn(false);
+        doNothing().when(mockCache).put(anyString(), anyString(), anyString());
+
+        boolean result = calculatorServiceBean.publicValidate(keyWordString, invalidCodeSixDigit);
+
+        assertFalse("Expected the token to be invalid and return false", result);
+    }
+}
+
+```
