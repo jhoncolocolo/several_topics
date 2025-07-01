@@ -100,6 +100,49 @@ public class CalculatorServiceBeanTest {
 
         assertTrue(token >= 0 && token <= 999999);
     }
+
+@Test
+public void testPublicValidate_WithRealExecution_AndMockedDependencies() throws Exception {
+    calculatorServiceBean = new CalculatorServiceBean();
+
+    String keyWordString = "mySecret";
+    String codeSixDigit = "123456";
+    String uniqueWord = keyWordString + "-" + codeSixDigit;
+    String trimmedUniqueWord = "trimmedWord";
+
+    // Mock utilityTool.trimCadena
+    mockStatic(myproject.utilitarios.utilityTool.class);
+    expect(myproject.utilitarios.utilityTool.trimCadena(uniqueWord)).andReturn(trimmedUniqueWord);
+
+    // Mock Mac.getInstance
+    mockStatic(Mac.class);
+    Mac mockMac = createMock(Mac.class);
+    expect(Mac.getInstance("HmacSHA1")).andReturn(mockMac);
+
+    // Mock SecretKeySpec constructor
+    SecretKeySpec mockSecretKeySpec = createMock(SecretKeySpec.class);
+    expectNew(SecretKeySpec.class, anyObject(byte[].class), eq("HmacSHA1")).andReturn(mockSecretKeySpec);
+
+    // Mock mac.init
+    mockMac.init(mockSecretKeySpec);
+    expectLastCall().once();
+
+    // Mock mac.doFinal
+    expect(mockMac.doFinal(anyObject(byte[].class))).andReturn(new byte[] { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 });
+
+    // Mock cacheContainsKey and cachePutObject
+    expectPrivate(calculatorServiceBean, "cacheContainsKey", anyObject(String.class)).andReturn(false);
+    expectPrivate(calculatorServiceBean, "cachePutObject", anyObject(String.class), anyObject(String.class), anyObject(String.class)).andReturn(null);
+
+    replayAll();
+
+    boolean result = calculatorServiceBean.publicValidate(keyWordString, codeSixDigit);
+
+    assertTrue(result);
+
+    verifyAll();
+}
+
 }
 
 ```
