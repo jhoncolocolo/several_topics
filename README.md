@@ -148,10 +148,12 @@ public void testPublicValidate_WithRealExecution_AndMockedDependencies() throws 
 ```
 
 ```
-package myproject.service;
+ package myproject.service;
 
 import static org.junit.Assert.*;
 import static org.powermock.api.easymock.PowerMock.*;
+
+import java.util.Date;
 
 import org.junit.After;
 import org.junit.Before;
@@ -159,6 +161,7 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.powermock.core.classloader.annotations.PrepareForTest;
 import org.powermock.modules.junit4.PowerMockRunner;
+import org.powermock.reflect.Whitebox;
 import myproject.utilitarios.utilityTool;
 import myservice.helper.CustomCacheControllerBean;
 
@@ -182,18 +185,26 @@ public class CalculatorServiceBeanTest {
         calculatorServiceBean = null;
     }
 
+    private String generateValidTOTP(String secret) throws Exception {
+        CalculatorServiceBean helper = new CalculatorServiceBean();
+        byte[] keyBytes = secret.getBytes();
+        long currentUnixTime = new Date().getTime() / 1000;
+        int token = Whitebox.invokeMethod(helper, "generateConvertedToken", keyBytes, currentUnixTime);
+        return String.format("%06d", token);
+    }
+
     @Test
-    public void testPublicValidate_WithRealExecution_AndMockedCache() throws Exception {
-        String keyWordString = "mySecret";
-        String codeSixDigit = "123456";
+    public void testPublicValidate_WithValidToken() throws Exception {
+        String keyWordString = "mySecretKey";
+        String codeSixDigit = generateValidTOTP(keyWordString);
         String uniqueWord = keyWordString + "-" + codeSixDigit;
         String trimmedUniqueWord = "trimmedWord";
 
-        // Mock static utilityTool.trimCadena
+        // Mock utilityTool.trimCadena
         mockStatic(utilityTool.class);
         expect(utilityTool.trimCadena(uniqueWord)).andReturn(trimmedUniqueWord);
 
-        // Mock CustomCacheControllerBean methods
+        // Mock cache behavior
         expect(mockCache.contieneClave(anyObject(String.class))).andReturn(false).anyTimes();
         mockCache.put(anyObject(String.class), anyObject(String.class), anyObject(String.class));
         expectLastCall().anyTimes();
@@ -202,11 +213,36 @@ public class CalculatorServiceBeanTest {
 
         boolean result = calculatorServiceBean.publicValidate(keyWordString, codeSixDigit);
 
-        // Aquí ajusta según tu expectativa de validación:
-        assertTrue(result || !result);
+        assertTrue("Expected the token to be valid and return true", result);
+
+        verifyAll();
+    }
+
+    @Test
+    public void testPublicValidate_WithInvalidToken() throws Exception {
+        String keyWordString = "mySecretKey";
+        String invalidCodeSixDigit = "000000"; // Deliberadamente inválido
+        String uniqueWord = keyWordString + "-" + invalidCodeSixDigit;
+        String trimmedUniqueWord = "trimmedWord";
+
+        // Mock utilityTool.trimCadena
+        mockStatic(utilityTool.class);
+        expect(utilityTool.trimCadena(uniqueWord)).andReturn(trimmedUniqueWord);
+
+        // Mock cache behavior
+        expect(mockCache.contieneClave(anyObject(String.class))).andReturn(false).anyTimes();
+        mockCache.put(anyObject(String.class), anyObject(String.class), anyObject(String.class));
+        expectLastCall().anyTimes();
+
+        replayAll();
+
+        boolean result = calculatorServiceBean.publicValidate(keyWordString, invalidCodeSixDigit);
+
+        assertFalse("Expected the token to be invalid and return false", result);
 
         verifyAll();
     }
 }
+
 
 ```
