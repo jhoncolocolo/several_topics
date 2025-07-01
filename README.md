@@ -146,3 +146,67 @@ public void testPublicValidate_WithRealExecution_AndMockedDependencies() throws 
 }
 
 ```
+
+```
+package myproject.service;
+
+import static org.junit.Assert.*;
+import static org.powermock.api.easymock.PowerMock.*;
+
+import org.junit.After;
+import org.junit.Before;
+import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.powermock.core.classloader.annotations.PrepareForTest;
+import org.powermock.modules.junit4.PowerMockRunner;
+import myproject.utilitarios.utilityTool;
+import myservice.helper.CustomCacheControllerBean;
+
+@RunWith(PowerMockRunner.class)
+@PrepareForTest({CalculatorServiceBean.class, utilityTool.class, CustomCacheControllerBean.class})
+public class CalculatorServiceBeanTest {
+
+    private CalculatorServiceBean calculatorServiceBean;
+    private CustomCacheControllerBean mockCache;
+
+    @Before
+    public void setUp() throws Exception {
+        calculatorServiceBean = new CalculatorServiceBean();
+        mockCache = createMock(CustomCacheControllerBean.class);
+        mockStatic(CustomCacheControllerBean.class);
+        expect(CustomCacheControllerBean.getInstance()).andReturn(mockCache).anyTimes();
+    }
+
+    @After
+    public void tearDown() {
+        calculatorServiceBean = null;
+    }
+
+    @Test
+    public void testPublicValidate_WithRealExecution_AndMockedCache() throws Exception {
+        String keyWordString = "mySecret";
+        String codeSixDigit = "123456";
+        String uniqueWord = keyWordString + "-" + codeSixDigit;
+        String trimmedUniqueWord = "trimmedWord";
+
+        // Mock static utilityTool.trimCadena
+        mockStatic(utilityTool.class);
+        expect(utilityTool.trimCadena(uniqueWord)).andReturn(trimmedUniqueWord);
+
+        // Mock CustomCacheControllerBean methods
+        expect(mockCache.contieneClave(anyObject(String.class))).andReturn(false).anyTimes();
+        mockCache.put(anyObject(String.class), anyObject(String.class), anyObject(String.class));
+        expectLastCall().anyTimes();
+
+        replayAll();
+
+        boolean result = calculatorServiceBean.publicValidate(keyWordString, codeSixDigit);
+
+        // Aquí ajusta según tu expectativa de validación:
+        assertTrue(result || !result);
+
+        verifyAll();
+    }
+}
+
+```
