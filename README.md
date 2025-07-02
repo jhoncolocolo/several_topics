@@ -171,3 +171,41 @@ public class CalculatorServiceBeanTest {
     }
 }
 ```
+
+
+```
+//para el vencido
+
+@Before
+    public void setUp() {
+        calculatorServiceBean = spy(new CalculatorServiceBean() {
+            @Override
+            protected long gettimeSpaceUnixTime() {
+                return 1725099880L; // tiempo fuera de rango para OTP vencido
+            }
+        });
+    }
+
+    @Test
+    public void testPublicValidate_WithExpiredToken_ShouldReturnFalse() throws Exception {
+        String keyWordString = "mySecretKey";
+        String uniqueWord = keyWordString + "-" + "000000";
+        byte[] keyBytes = uniqueWord.getBytes();
+
+        Method method = CalculatorServiceBean.class.getDeclaredMethod(
+            "generateConvertedToken", byte[].class, long.class
+        );
+        method.setAccessible(true);
+
+        long expiredTime = 1725099880L;
+        int expiredOtp = (int) method.invoke(calculatorServiceBean, keyBytes, expiredTime);
+        String codeSixDigit = String.format("%06d", expiredOtp);
+
+        doReturn(false).when(calculatorServiceBean).cacheContainsKey(anyString());
+        doNothing().when(calculatorServiceBean).cachePutObject(anyString(), anyString(), anyString());
+
+        boolean result = calculatorServiceBean.publicValidate(keyWordString, codeSixDigit);
+
+        assertFalse("Expected OTP to be invalid as it is expired and outside the valid window", result);
+    }
+```
