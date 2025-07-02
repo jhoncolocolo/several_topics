@@ -209,3 +209,93 @@ public class CalculatorServiceBeanTest {
         assertFalse("Expected OTP to be invalid as it is expired and outside the valid window", result);
     }
 ```
+
+
+```
+package myproject.service;
+
+import static org.junit.Assert.*;
+import static org.mockito.Mockito.*;
+
+import java.lang.reflect.Method;
+import javax.crypto.Mac;
+import javax.crypto.spec.SecretKeySpec;
+import org.junit.Before;
+import org.junit.Test;
+
+public class CalculatorServiceBeanTest {
+    private CalculatorServiceBean calculatorServiceBean;
+    private long currentUnixTime;
+
+    @Before
+    public void setUp() {
+        currentUnixTime = System.currentTimeMillis() / 1000;
+        calculatorServiceBean = spy(new CalculatorServiceBean() {
+            @Override
+            protected long gettimeSpaceUnixTime() {
+                return currentUnixTime;
+            }
+        });
+    }
+
+    @Test
+    public void testPublicValidate_WithValidToken_ShouldReturnTrue() throws Exception {
+        String keyWordString = "mySecretKey";
+        String uniqueWord = keyWordString + "-000000";
+        byte[] keyBytes = uniqueWord.getBytes();
+
+        Method method = CalculatorServiceBean.class.getDeclaredMethod(
+            "generateConvertedToken", byte[].class, long.class
+        );
+        method.setAccessible(true);
+
+        long validTime = currentUnixTime;
+        int validOtp = (int) method.invoke(calculatorServiceBean, keyBytes, validTime);
+        String codeSixDigit = String.format("%06d", validOtp);
+
+        doReturn(false).when(calculatorServiceBean).cacheContainsKey(anyString());
+        doNothing().when(calculatorServiceBean).cachePutObject(anyString(), anyString(), anyString());
+
+        boolean result = calculatorServiceBean.publicValidate(keyWordString, codeSixDigit);
+
+        assertTrue("Expected OTP to be valid and within the current window", result);
+    }
+
+    @Test
+    public void testPublicValidate_WithExpiredToken_ShouldReturnFalse() throws Exception {
+        String keyWordString = "mySecretKey";
+        String uniqueWord = keyWordString + "-000000";
+        byte[] keyBytes = uniqueWord.getBytes();
+
+        Method method = CalculatorServiceBean.class.getDeclaredMethod(
+            "generateConvertedToken", byte[].class, long.class
+        );
+        method.setAccessible(true);
+
+        long expiredTime = currentUnixTime - 500; // fuera de rango de ventana
+        int expiredOtp = (int) method.invoke(calculatorServiceBean, keyBytes, expiredTime);
+        String codeSixDigit = String.format("%06d", expiredOtp);
+
+        doReturn(false).when(calculatorServiceBean).cacheContainsKey(anyString());
+        doNothing().when(calculatorServiceBean).cachePutObject(anyString(), anyString(), anyString());
+
+        boolean result = calculatorServiceBean.publicValidate(keyWordString, codeSixDigit);
+
+        assertFalse("Expected OTP to be invalid as it is expired", result);
+    }
+
+    @Test
+    public void testPublicValidate_WithInvalidOtp_ShouldReturnFalse() {
+        String keyWordString = "mySecretKey";
+        String invalidOtp = "999999"; // OTP inválido asegurado
+
+        doReturn(false).when(calculatorServiceBean).cacheContainsKey(anyString());
+        doNothing().when(calculatorServiceBean).cachePutObject(anyString(), anyString(), anyString());
+
+        boolean result = calculatorServiceBean.publicValidate(keyWordString, invalidOtp);
+
+        assertFalse("Expected OTP to be invalid due to incorrect token", result);
+    }
+}
+
+```
