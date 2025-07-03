@@ -1,5 +1,5 @@
 ```
-package myproject.service;
+ package myproject.service;
 
 import static org.junit.Assert.*;
 import static org.mockito.Mockito.*;
@@ -7,97 +7,79 @@ import static org.mockito.Mockito.*;
 import java.lang.reflect.Method;
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
+import myproject.dao.QueryExecutor;
+import myproject.model.UsuarioDTO;
 import org.junit.Before;
 import org.junit.Test;
 
 public class CalculatorServiceBeanTest {
     private CalculatorServiceBean calculatorServiceBean;
-¿
+    private QueryExecutor mockQueryExecutor;
+    private long currentUnixTime;
+    private byte[] keyBytes;
+    private String keyWordString;
+
     @Before
-    public void setUp() {
-        calculatorServiceBean = new CalculatorServiceBean() {
-            @Override
-            protected int getTimeSpace() {
-                return 240; // estable
-            }
-    
+    public void setUp() throws Exception {
+        currentUnixTime = System.currentTimeMillis() / 1000;
+        mockQueryExecutor = mock(QueryExecutor.class);
+        calculatorServiceBean = spy(new CalculatorServiceBean(mockQueryExecutor) {
             @Override
             protected long gettimeSpaceUnixTime() {
-                return 1725100000L; // valor fijo para pruebas
+                return currentUnixTime;
             }
-        };
-    }
-
-    @Test
-    public void testPublicValidate_WithValidToken() throws Exception {
-        String keyWordString = "mySecretKey";
-        byte[] keyBytes = (keyWordString + "-dummy").getBytes();
-        long currentUnixTime = System.currentTimeMillis() / 1000;
-        int timeSpace = 240;
-        int validOtp = -1;
-
-        Method method = CalculatorServiceBean.class.getDeclaredMethod("generateConvertedToken", byte[].class, long.class);
-        method.setAccessible(true);
-
-        for (int i = -((timeSpace - 1) / 2); i <= timeSpace / 2; i++) {
-            long timeChanged = currentUnixTime + i;
-            int candidateOtp = (int) method.invoke(calculatorServiceBean, keyBytes, timeChanged);
-            validOtp = candidateOtp;
-            break;
-        }
-
-        String codeSixDigit = String.format("%06d", validOtp);
-        
-        // Simula que el OTP no existe previamente en caché
+        });
         doReturn(false).when(calculatorServiceBean).cacheContainsKey(anyString());
         doNothing().when(calculatorServiceBean).cachePutObject(anyString(), anyString(), anyString());
-
-        boolean result = calculatorServiceBean.publicValidate(keyWordString, codeSixDigit);
-        assertTrue("Expected OTP to be valid", result);
     }
 
+    private void configureUsuarioDTO(String identificacion, String nombre, String usuario, String application) {
+        UsuarioDTO usuarioDTO = new UsuarioDTO();
+        usuarioDTO.setIdentificacion(identificacion);
+        usuarioDTO.setNombre(nombre);
+        usuarioDTO.setUsuario(usuario);
+        usuarioDTO.setApplication(application);
+        this.keyWordString = usuario;
+        this.keyBytes = (application + "-000000").getBytes();
+        when(mockQueryExecutor.findUsuarioByUsername(usuario)).thenReturn(usuarioDTO);
+    }
 
-    //Nuevo
+    private String generateOtpAtTime(long time) throws Exception {
+        Method method = CalculatorServiceBean.class.getDeclaredMethod(
+            "generateConvertedToken", byte[].class, long.class
+        );
+        method.setAccessible(true);
+        int otp = (int) method.invoke(calculatorServiceBean, keyBytes, time);
+        return String.format("%06d", otp);
+    }
 
     @Test
-public void testPublicValidate_WithValidTwoToken() throws Exception {
-    String keyWordString = "mySecretKey";
-    String uniqueWord = keyWordString + "-dummy";
-    byte[] keyBytes = uniqueWord.getBytes();
-
-    int timeSpace = 240; // igual que en el método real
-    long timeOriginal = 1725100000L; // igual que en el método real
-    int validOtp = -1;
-
-    Method method = CalculatorServiceBean.class.getDeclaredMethod(
-        "generateConvertedToken", byte[].class, long.class
-    );
-    method.setAccessible(true);
-
-    // Recorre el mismo rango de tiempos que en validateToken
-    for (int i = -((timeSpace - 1) / 2); i <= timeSpace / 2; ++i) {
-        long timeChanged = timeOriginal + i;
-        int candidateOtp = (int) method.invoke(calculatorServiceBean, keyBytes, timeChanged);
-        System.out.println("timeChanged: " + timeChanged + " candidateOtp: " + candidateOtp);
-
-        validOtp = candidateOtp;
-        break; // Tomamos el primero para el test
+    public void testPublicValidate_WithValidToken_ShouldReturnTrue() throws Exception {
+        configureUsuarioDTO("L00001", "benito", "benito.alvez", "ForOtp");
+        String codeSixDigit = generateOtpAtTime(currentUnixTime);
+        boolean result = calculatorServiceBean.publicValidate(keyWordString, codeSixDigit);
+        assertTrue(result);
     }
 
-    String codeSixDigit = String.format("%06d", validOtp);
+    @Test
+    public void testPublicValidate_WithExpiredToken_ShouldReturnFalse() throws Exception {
+        configureUsuarioDTO("L00002", "ana", "ana.gomez", "ForOtp");
+        String codeSixDigit = generateOtpAtTime(currentUnixTime - 500);
+        boolean result = calculatorServiceBean.publicValidate(keyWordString, codeSixDigit);
+        assertFalse(result);
+    }
 
-    // Mock de caché
-    doReturn(false).when(calculatorServiceBean).cacheContainsKey(anyString());
-    doNothing().when(calculatorServiceBean).cachePutObject(anyString(), anyString(), anyString());
-
-    boolean result = calculatorServiceBean.publicValidate(keyWordString, codeSixDigit);
-
-    assertTrue("Expected OTP to be valid", result);
-}
+    @Test
+    public void testPublicValidate_WithInvalidOtp_ShouldReturnFalse() {
+        configureUsuarioDTO("L00003", "carlos", "carlos.martin", "ForOtp");
+        String invalidOtp = "999999";
+        boolean result = calculatorServiceBean.publicValidate(keyWordString, invalidOtp);
+        assertFalse(result);
+    }
 }
 
 ```
-
+--------------------------------------------------------------------------------
 ```
 package myproject.service;
 
