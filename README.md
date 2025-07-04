@@ -288,3 +288,167 @@ public class CalculatorServiceBeanTest {
 }
 
 ```
+
+
+```
+package myproject.service;
+
+import myproject.dao.QueryExecutor;
+import myproject.dao.UsuarioLockedExec;
+import myproject.model.UsuarioDTO;
+import myproject.model.UsuarioLockedDTO;
+import org.junit.Before;
+import org.junit.Test;
+import org.mockito.Mockito;
+
+import java.lang.reflect.Method;
+
+import static org.junit.Assert.*;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.*;
+
+public class CalculatorServiceBeanTest {
+
+    private CalculatorServiceBean calculatorServiceBean;
+    private QueryExecutor mockQueryExecutor;
+    private UsuarioLockedExec mockUsuarioLockedExec;
+    private long currentUnixTime;
+    private byte[] keyBytes;
+
+    @Before
+    public void setUp() throws Exception {
+        currentUnixTime = System.currentTimeMillis() / 1000;
+        mockQueryExecutor = mock(QueryExecutor.class);
+        mockUsuarioLockedExec = mock(UsuarioLockedExec.class);
+
+        calculatorServiceBean = spy(new CalculatorServiceBean() {
+            @Override
+            protected long gettimeSpaceUnixTime() {
+                return currentUnixTime;
+            }
+        });
+
+        calculatorServiceBean.setMockQueryExecutor(mockQueryExecutor);
+        calculatorServiceBean.setMockUsuarioLockedExec(mockUsuarioLockedExec);
+
+        doReturn(false).when(calculatorServiceBean).cacheContainsKey(anyString());
+        doNothing().when(calculatorServiceBean).cachePutObject(anyString(), anyString(), anyString());
+    }
+
+    public static class UsuarioDTOBuilder {
+        private String usuario = "default.usuario";
+        private String identificacion = "L00001";
+        private String application = "DefaultApp";
+        private String codigo = "000001";
+        private String prop5 = "valor5";
+        private String prop6 = "valor6";
+        private String prop7 = "valor7";
+        private String prop8 = "valor8";
+        private String prop9 = "valor9";
+        private String prop10 = "valor10";
+
+        public UsuarioDTOBuilder withUsuario(String usuario) {
+            this.usuario = usuario;
+            return this;
+        }
+
+        public UsuarioDTOBuilder withIdentificacion(String identificacion) {
+            this.identificacion = identificacion;
+            return this;
+        }
+
+        public UsuarioDTOBuilder withApplication(String application) {
+            this.application = application;
+            return this;
+        }
+
+        public UsuarioDTOBuilder withCodigo(String codigo) {
+            this.codigo = codigo;
+            return this;
+        }
+
+        public UsuarioDTO build() {
+            UsuarioDTO dto = new UsuarioDTO();
+            dto.setUsuario(usuario);
+            dto.setIdentificacion(identificacion);
+            dto.setApplication(application);
+            return dto;
+        }
+    }
+
+    private void configureUsuarioLockedDTO(String usuario, boolean estado) {
+        UsuarioLockedDTO usuarioLockedDTO = new UsuarioLockedDTO();
+        usuarioLockedDTO.setUsuario(usuario);
+        usuarioLockedDTO.setEstado(estado);
+        when(mockUsuarioLockedExec.findUserEstado(anyString())).thenReturn(usuarioLockedDTO);
+    }
+
+    private String generateOtpAtTime(long time) throws Exception {
+        UsuarioDTO usuarioDTO = new UsuarioDTOBuilder().build();
+        String uniqueWord = usuarioDTO.getApplication() + "-000000";
+        this.keyBytes = uniqueWord.getBytes();
+        Method method = CalculatorServiceBean.class.getDeclaredMethod("generateConvertedToken", byte[].class, long.class);
+        method.setAccessible(true);
+        int otp = (int) method.invoke(calculatorServiceBean, keyBytes, time);
+        return String.format("%06d", otp);
+    }
+
+    @Test
+    public void testPublicValidate_DefaultValues_ShouldReturnTrue() throws Exception {
+        UsuarioDTO usuarioDTO = new UsuarioDTOBuilder().build();
+        when(mockQueryExecutor.findUsuarioByUsername(anyString())).thenReturn(usuarioDTO);
+        configureUsuarioLockedDTO(usuarioDTO.getUsuario(), true);
+        String otp = generateOtpAtTime(currentUnixTime);
+
+        boolean result = calculatorServiceBean.publicValidate(usuarioDTO.getUsuario(), otp);
+        assertTrue(result);
+    }
+
+    @Test
+    public void testPublicValidate_CustomUser_ShouldReturnTrue() throws Exception {
+        UsuarioDTO usuarioDTO = new UsuarioDTOBuilder()
+                .withUsuario("jose.perez")
+                .withApplication("AppJose")
+                .build();
+
+        when(mockQueryExecutor.findUsuarioByUsername(anyString())).thenReturn(usuarioDTO);
+        configureUsuarioLockedDTO(usuarioDTO.getUsuario(), true);
+        String otp = generateOtpAtTime(currentUnixTime);
+
+        boolean result = calculatorServiceBean.publicValidate(usuarioDTO.getUsuario(), otp);
+        assertTrue(result);
+    }
+
+    @Test
+    public void testPublicValidate_UserBlocked_ShouldReturnFalse() throws Exception {
+        UsuarioDTO usuarioDTO = new UsuarioDTOBuilder()
+                .withUsuario("blocked.user")
+                .withApplication("BlockedApp")
+                .build();
+
+        when(mockQueryExecutor.findUsuarioByUsername(anyString())).thenReturn(usuarioDTO);
+        configureUsuarioLockedDTO(usuarioDTO.getUsuario(), false);
+        String otp = generateOtpAtTime(currentUnixTime);
+
+        boolean result = calculatorServiceBean.publicValidate(usuarioDTO.getUsuario(), otp);
+        assertFalse(result);
+    }
+
+    @Test
+    public void testPublicValidate_ExpiredOtp_ShouldReturnFalse() throws Exception {
+        UsuarioDTO usuarioDTO = new UsuarioDTOBuilder()
+                .withUsuario("exp.user")
+                .withApplication("ExpApp")
+                .build();
+
+        when(mockQueryExecutor.findUsuarioByUsername(anyString())).thenReturn(usuarioDTO);
+        configureUsuarioLockedDTO(usuarioDTO.getUsuario(), true);
+        String otp = generateOtpAtTime(currentUnixTime - 100000); // OTP expirado
+
+        boolean result = calculatorServiceBean.publicValidate(usuarioDTO.getUsuario(), otp);
+        assertFalse(result);
+    }
+}
+
+```
