@@ -48,6 +48,33 @@ public class GenericSorter {
 
         lista.sort(comparator);
     }
+
+import java.util.*;
+import java.util.function.Function;
+
+public class GenericSorter {
+
+    /**
+     * Ordena genéricamente una lista por el campo indicado por la extractorFunction.
+     *
+     * @param lista             Lista de elementos de tipo T
+     * @param extractorFunction Función que extrae el campo sobre el que se ordena
+     * @param ascendente        true para ascendente, false para descendente
+     * @param <T>               Tipo del objeto en la lista
+     */
+    public static <T> void ordenarListaPorCampo(
+            List<T> lista,
+            Function<T, ? extends Comparable> extractorFunction,
+            boolean ascendente) {
+
+        Comparator<T> comparator = Comparator.comparing(extractorFunction, Comparator.nullsLast(Comparator.naturalOrder()));
+        if (!ascendente) {
+            comparator = comparator.reversed();
+        }
+        lista.sort(comparator);
+    }
+}
+
 }
 
 @Test
