@@ -1,454 +1,88 @@
 ```
- package myproject.service;
+import java.text.ParseException;
+import java.text.SimpleDateFormat;
+import java.util.*;
+import java.util.function.Function;
 
-import static org.junit.Assert.*;
-import static org.mockito.Mockito.*;
+public class GenericSorter {
 
-import java.lang.reflect.Method;
-import javax.crypto.Mac;
-import javax.crypto.spec.SecretKeySpec;
-import myproject.dao.QueryExecutor;
-import myproject.model.UsuarioDTO;
-import org.junit.Before;
-import org.junit.Test;
+    /**
+     * Ordena de forma genérica una lista por un campo especificado, de forma ascendente o descendente.
+     * 
+     * @param lista         Lista de cualquier tipo
+     * @param campo         Campo sobre el cual ordenar (soporta "fecha_modificacion" y "application" para AnyDTO)
+     * @param ascendente    true para ascendente, false para descendente
+     * @param <T>           Tipo de objeto de la lista
+     */
+    public static <T> void ordenarListaPorCampo(List<T> lista, String campo, boolean ascendente) {
+        if (lista == null || lista.isEmpty()) return;
 
-public class CalculatorServiceBeanTest {
-    private CalculatorServiceBean calculatorServiceBean;
-    private QueryExecutor mockQueryExecutor;
-    private long currentUnixTime;
-    private byte[] keyBytes;
-    private String keyWordString;
+        Comparator<T> comparator;
 
-    @Before
-    public void setUp() throws Exception {
-        currentUnixTime = System.currentTimeMillis() / 1000;
-        mockQueryExecutor = mock(QueryExecutor.class);
-        calculatorServiceBean = spy(new CalculatorServiceBean(mockQueryExecutor) {
-            @Override
-            protected long gettimeSpaceUnixTime() {
-                return currentUnixTime;
+        T firstElement = lista.get(0);
+        if (firstElement instanceof UsuarioDTO) {
+            UsuarioDTO dummy = (UsuarioDTO) firstElement;
+
+            if ("fecha_modificacion".equalsIgnoreCase(campo)) {
+                SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS");
+                comparator = Comparator.comparing((T obj) -> {
+                    try {
+                        String fechaStr = ((UsuarioDTO) obj).getFechaModificacion();
+                        return sdf.parse(fechaStr);
+                    } catch (ParseException e) {
+                        throw new RuntimeException(e);
+                    }
+                });
+            } else if ("application".equalsIgnoreCase(campo)) {
+                comparator = Comparator.comparing(obj -> ((UsuarioDTO) obj).getApplication());
+            } else {
+                throw new IllegalArgumentException("Campo no soportado: " + campo);
             }
-        });
-        doReturn(false).when(calculatorServiceBean).cacheContainsKey(anyString());
-        doNothing().when(calculatorServiceBean).cachePutObject(anyString(), anyString(), anyString());
-    }
+        } else {
+            throw new IllegalArgumentException("Tipo no soportado: " + firstElement.getClass().getName());
+        }
 
-    private void configureUsuarioDTO(String identificacion, String nombre, String usuario, String application) {
-        UsuarioDTO usuarioDTO = new UsuarioDTO();
-        usuarioDTO.setIdentificacion(identificacion);
-        usuarioDTO.setNombre(nombre);
-        usuarioDTO.setUsuario(usuario);
-        usuarioDTO.setApplication(application);
-        this.keyWordString = usuario;
-        this.keyBytes = (application + "-000000").getBytes();
-        when(mockQueryExecutor.findUsuarioByUsername(usuario)).thenReturn(usuarioDTO);
-    }
+        if (!ascendente) {
+            comparator = comparator.reversed();
+        }
 
-    private String generateOtpAtTime(long time) throws Exception {
-        Method method = CalculatorServiceBean.class.getDeclaredMethod(
-            "generateConvertedToken", byte[].class, long.class
-        );
-        method.setAccessible(true);
-        int otp = (int) method.invoke(calculatorServiceBean, keyBytes, time);
-        return String.format("%06d", otp);
-    }
-
-    @Test
-    public void testPublicValidate_WithValidToken_ShouldReturnTrue() throws Exception {
-        configureUsuarioDTO("L00001", "benito", "benito.alvez", "ForOtp");
-        String codeSixDigit = generateOtpAtTime(currentUnixTime);
-        boolean result = calculatorServiceBean.publicValidate(keyWordString, codeSixDigit);
-        assertTrue(result);
-    }
-
-    @Test
-    public void testPublicValidate_WithExpiredToken_ShouldReturnFalse() throws Exception {
-        configureUsuarioDTO("L00002", "ana", "ana.gomez", "ForOtp");
-        String codeSixDigit = generateOtpAtTime(currentUnixTime - 500);
-        boolean result = calculatorServiceBean.publicValidate(keyWordString, codeSixDigit);
-        assertFalse(result);
-    }
-
-    @Test
-    public void testPublicValidate_WithInvalidOtp_ShouldReturnFalse() {
-        configureUsuarioDTO("L00003", "carlos", "carlos.martin", "ForOtp");
-        String invalidOtp = "999999";
-        boolean result = calculatorServiceBean.publicValidate(keyWordString, invalidOtp);
-        assertFalse(result);
+        lista.sort(comparator);
     }
 }
 
-```
---------------------------------------------------------------------------------
-```java
-@RunWith(PowerMockRunner.class)
-@PrepareForTest({CalculatorServiceBean.class, UsuarioLockedExec.class})
-public class CalculatorServiceBeanTest {
-    
-    @Mock
-    private QueryExecutor mockQueryExecutor;
+@Test
+public void testOrdenarUsuariosPorFechaModificacionDesc() {
+    List<UsuarioDTO> usuarios = new ArrayList<>();
+    usuarios.add(new UsuarioDTO("L00001", "benito", "benito.alvez", "appB", "2020-10-16 01:02:03.999"));
+    usuarios.add(new UsuarioDTO("L00002", "alan", "alan.roldan", "appC", "2024-05-06 01:02:03.999"));
+    usuarios.add(new UsuarioDTO("L00003", "roberta", "roberta.canizales", "appA", "2018-01-06 01:02:03.999"));
 
-    @Mock
-    private UsuarioLockedExec mockUsuarioLockedExec;
+    // Invocar el método genérico de orden
+    GenericSorter.ordenarListaPorCampo(usuarios, "fecha_modificacion", false);
 
-    @InjectMocks
-    private CalculatorServiceBean calculatorServiceBean;
+    // Validar orden descendente
+    assertEquals("L00002", usuarios.get(0).getIdentificacion());
+    assertEquals("L00001", usuarios.get(1).getIdentificacion());
+    assertEquals("L00003", usuarios.get(2).getIdentificacion());
 
-    @Before
-    public void setUp() throws Exception {
-        MockitoAnnotations.initMocks(this);
-        PowerMockito.whenNew(UsuarioLockedExec.class).withNoArguments().thenReturn(mockUsuarioLockedExec);
-        calculatorServiceBean = PowerMockito.spy(new CalculatorServiceBean());
-        doReturn(false).when(calculatorServiceBean).cacheContainsKey(anyString());
-        doNothing().when(calculatorServiceBean).cachePutObject(anyString(), anyString(), anyString());
-    }
-
-    @Test
-    public void testPublicValidate_WithValidOtp_ShouldReturnTrue() throws Exception {
-        UsuarioDTO usuarioDTO = new UsuarioDTO();
-        usuarioDTO.setIdentificacion("L00001");
-        usuarioDTO.setNombre("benito");
-        usuarioDTO.setUsuario("benito.alvez");
-        usuarioDTO.setApplication("ForOtp");
-
-        when(mockQueryExecutor.findUsuarioByUsername("benito.alvez")).thenReturn(usuarioDTO);
-
-        UsuarioLockedDTO usuarioLockedDTO = new UsuarioLockedDTO();
-        usuarioLockedDTO.setUsuario("benito.alvez");
-        usuarioLockedDTO.setEstado(true);
-
-        when(mockUsuarioLockedExec.findUserEstado("benito.alvez")).thenReturn(usuarioLockedDTO);
-
-        long currentUnixTime = System.currentTimeMillis() / 1000;
-        String keyWordString = "benito.alvez";
-        byte[] keyBytes = ("ForOtp-000000").getBytes();
-        Method method = CalculatorServiceBean.class.getDeclaredMethod("generateConvertedToken", byte[].class, long.class);
-        method.setAccessible(true);
-        long validOtp = (long) method.invoke(calculatorServiceBean, keyBytes, currentUnixTime);
-        String otp = String.format("%06d", validOtp);
-
-        boolean result = calculatorServiceBean.publicValidate(keyWordString, otp);
-        assertTrue(result);
-    }
-
-    @Test
-    public void testPublicValidate_WithInvalidOtp_ShouldReturnFalse() throws Exception {
-        UsuarioDTO usuarioDTO = new UsuarioDTO();
-        usuarioDTO.setIdentificacion("L00001");
-        usuarioDTO.setNombre("benito");
-        usuarioDTO.setUsuario("benito.alvez");
-        usuarioDTO.setApplication("ForOtp");
-
-        when(mockQueryExecutor.findUsuarioByUsername("benito.alvez")).thenReturn(usuarioDTO);
-
-        UsuarioLockedDTO usuarioLockedDTO = new UsuarioLockedDTO();
-        usuarioLockedDTO.setUsuario("benito.alvez");
-        usuarioLockedDTO.setEstado(true);
-
-        when(mockUsuarioLockedExec.findUserEstado("benito.alvez")).thenReturn(usuarioLockedDTO);
-
-        String keyWordString = "benito.alvez";
-        String invalidOtp = "000000";
-
-        boolean result = calculatorServiceBean.publicValidate(keyWordString, invalidOtp);
-        assertFalse(result);
-    }
-}
-```
-
-otra
-```
-package myproject.service;
-
-import myproject.dao.QueryExecutor;
-import myproject.dao.UsuarioLockedExec;
-import myproject.model.UsuarioDTO;
-import myproject.model.UsuarioLockedDTO;
-import org.junit.Before;
-import org.junit.Test;
-import org.junit.runner.RunWith;
-import org.mockito.Mockito;
-import org.powermock.api.mockito.PowerMockito;
-import org.powermock.core.classloader.annotations.PrepareForTest;
-import org.powermock.modules.junit4.PowerMockRunner;
-
-import javax.crypto.Mac;
-import java.lang.reflect.Method;
-
-import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertTrue;
-import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.Mockito.*;
-
-@RunWith(PowerMockRunner.class)
-@PrepareForTest({CalculatorServiceBean.class, UsuarioLockedExec.class, Mac.class})
-public class CalculatorServiceBeanTest {
-
-    private CalculatorServiceBean calculatorServiceBean;
-    private QueryExecutor mockQueryExecutor;
-    private UsuarioLockedExec mockUsuarioLockedExec;
-    private long currentUnixTime;
-    private byte[] keyBytes;
-    private String keyWordString;
-
-    @Before
-    public void setUp() throws Exception {
-        currentUnixTime = System.currentTimeMillis() / 1000;
-
-        mockQueryExecutor = mock(QueryExecutor.class);
-        mockUsuarioLockedExec = mock(UsuarioLockedExec.class);
-
-        calculatorServiceBean = PowerMockito.spy(new CalculatorServiceBean() {
-            @Override
-            protected long gettimeSpaceUnixTime() {
-                return currentUnixTime;
-            }
-        });
-
-        doReturn(false).when(calculatorServiceBean).cacheContainsKey(anyString());
-        doNothing().when(calculatorServiceBean).cachePutObject(anyString(), anyString(), anyString());
-
-        // Mock Mac.getInstance("HmacSHA1")
-        Mac mockMac = mock(Mac.class);
-        PowerMockito.mockStatic(Mac.class);
-        PowerMockito.when(Mac.getInstance("HmacSHA1")).thenReturn(mockMac);
-        when(mockMac.doFinal(any(byte[].class))).thenReturn(new byte[20]); // Simula un resultado consistente
-
-        // Mock de la construcción de UsuarioLockedExec para interceptar 'new'
-        PowerMockito.whenNew(UsuarioLockedExec.class).withAnyArguments().thenReturn(mockUsuarioLockedExec);
-    }
-
-    private void configureUsuarioDTO(String identificacion, String nombre, String usuario, String application) {
-        UsuarioDTO usuarioDTO = new UsuarioDTO();
-        usuarioDTO.setIdentificacion(identificacion);
-        usuarioDTO.setNombre(nombre);
-        usuarioDTO.setUsuario(usuario);
-        usuarioDTO.setApplication(application);
-        this.keyWordString = usuario;
-        this.keyBytes = (application + "-000000").getBytes();
-        when(mockQueryExecutor.findUsuarioByUsername(usuario)).thenReturn(usuarioDTO);
-    }
-
-    private void configureUsuarioLockedDTO(String usuario, boolean estado) {
-        UsuarioLockedDTO usuarioLockedDTO = new UsuarioLockedDTO();
-        usuarioLockedDTO.setUsuario(usuario);
-        usuarioLockedDTO.setEstado(estado);
-        this.keyWordString = usuario;
-        when(mockUsuarioLockedExec.findUserEstado(usuario)).thenReturn(usuarioLockedDTO);
-    }
-
-    private String generateOtpAtTime(long time) throws Exception {
-        Method method = CalculatorServiceBean.class.getDeclaredMethod(
-                "generateConvertedToken", byte[].class, long.class
-        );
-        method.setAccessible(true);
-        int otp = (int) method.invoke(calculatorServiceBean, keyBytes, time);
-        return String.format("%06d", otp);
-    }
-
-    @Test
-    public void testPublicValidate_WithValidToken_ShouldReturnTrue() throws Exception {
-        configureUsuarioDTO("L00001", "benito", "benito.alvez", "ForOtp");
-        configureUsuarioLockedDTO("benito.alvez", true);
-        String codeSixDigit = generateOtpAtTime(currentUnixTime);
-
-        boolean result = calculatorServiceBean.publicValidate(keyWordString, codeSixDigit);
-        assertTrue(result);
-    }
-
-    @Test
-    public void testPublicValidate_WithInvalidToken_ShouldReturnFalse() throws Exception {
-        configureUsuarioDTO("L00002", "ana", "ana.rojas", "ForOtp");
-        configureUsuarioLockedDTO("ana.rojas", true);
-        String invalidOtp = "123456"; // OTP inválido
-
-        boolean result = calculatorServiceBean.publicValidate(keyWordString, invalidOtp);
-        assertFalse(result);
-    }
-
-    @Test
-    public void testPublicValidate_WithExpiredToken_ShouldReturnFalse() throws Exception {
-        configureUsuarioDTO("L00003", "carlos", "carlos.perez", "ForOtp");
-        configureUsuarioLockedDTO("carlos.perez", true);
-        String expiredOtp = generateOtpAtTime(currentUnixTime - 1000); // token vencido
-
-        boolean result = calculatorServiceBean.publicValidate(keyWordString, expiredOtp);
-        assertFalse(result);
-    }
-
-    @Test
-    public void testPublicValidate_UserLocked_ShouldReturnFalse() throws Exception {
-        configureUsuarioDTO("L00004", "laura", "laura.mendez", "ForOtp");
-        configureUsuarioLockedDTO("laura.mendez", false); // Usuario bloqueado
-        String codeSixDigit = generateOtpAtTime(currentUnixTime);
-
-        boolean result = calculatorServiceBean.publicValidate(keyWordString, codeSixDigit);
-        assertFalse(result);
-    }
+    usuarios.forEach(System.out::println);
 }
 
-```
+@Test
+public void testOrdenarUsuariosPorApplicationAsc() {
+    List<UsuarioDTO> usuarios = new ArrayList<>();
+    usuarios.add(new UsuarioDTO("L00001", "benito", "benito.alvez", "appB", "2020-10-16 01:02:03.999"));
+    usuarios.add(new UsuarioDTO("L00002", "alan", "alan.roldan", "appC", "2024-05-06 01:02:03.999"));
+    usuarios.add(new UsuarioDTO("L00003", "roberta", "roberta.canizales", "appA", "2018-01-06 01:02:03.999"));
 
+    // Invocar el método genérico de orden
+    GenericSorter.ordenarListaPorCampo(usuarios, "application", true);
 
-```
-package myproject.service;
+    // Validar orden ascendente por aplicación
+    assertEquals("appA", usuarios.get(0).getApplication());
+    assertEquals("appB", usuarios.get(1).getApplication());
+    assertEquals("appC", usuarios.get(2).getApplication());
 
-import myproject.dao.QueryExecutor;
-import myproject.dao.UsuarioLockedExec;
-import myproject.model.UsuarioDTO;
-import myproject.model.UsuarioLockedDTO;
-import org.junit.Before;
-import org.junit.Test;
-import org.mockito.Mockito;
-
-import java.lang.reflect.Method;
-
-import static org.junit.Assert.*;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.Mockito.*;
-
-public class CalculatorServiceBeanTest {
-
-    private CalculatorServiceBean calculatorServiceBean;
-    private QueryExecutor mockQueryExecutor;
-    private UsuarioLockedExec mockUsuarioLockedExec;
-    private long currentUnixTime;
-    private byte[] keyBytes;
-
-    @Before
-    public void setUp() throws Exception {
-        currentUnixTime = System.currentTimeMillis() / 1000;
-        mockQueryExecutor = mock(QueryExecutor.class);
-        mockUsuarioLockedExec = mock(UsuarioLockedExec.class);
-
-        calculatorServiceBean = spy(new CalculatorServiceBean() {
-            @Override
-            protected long gettimeSpaceUnixTime() {
-                return currentUnixTime;
-            }
-        });
-
-        calculatorServiceBean.setMockQueryExecutor(mockQueryExecutor);
-        calculatorServiceBean.setMockUsuarioLockedExec(mockUsuarioLockedExec);
-
-        doReturn(false).when(calculatorServiceBean).cacheContainsKey(anyString());
-        doNothing().when(calculatorServiceBean).cachePutObject(anyString(), anyString(), anyString());
-    }
-
-    public static class UsuarioDTOBuilder {
-        private String usuario = "default.usuario";
-        private String identificacion = "L00001";
-        private String application = "DefaultApp";
-        private String codigo = "000001";
-        private String prop5 = "valor5";
-        private String prop6 = "valor6";
-        private String prop7 = "valor7";
-        private String prop8 = "valor8";
-        private String prop9 = "valor9";
-        private String prop10 = "valor10";
-
-        public UsuarioDTOBuilder withUsuario(String usuario) {
-            this.usuario = usuario;
-            return this;
-        }
-
-        public UsuarioDTOBuilder withIdentificacion(String identificacion) {
-            this.identificacion = identificacion;
-            return this;
-        }
-
-        public UsuarioDTOBuilder withApplication(String application) {
-            this.application = application;
-            return this;
-        }
-
-        public UsuarioDTOBuilder withCodigo(String codigo) {
-            this.codigo = codigo;
-            return this;
-        }
-
-        public UsuarioDTO build() {
-            UsuarioDTO dto = new UsuarioDTO();
-            dto.setUsuario(usuario);
-            dto.setIdentificacion(identificacion);
-            dto.setApplication(application);
-            return dto;
-        }
-    }
-
-    private void configureUsuarioLockedDTO(String usuario, boolean estado) {
-        UsuarioLockedDTO usuarioLockedDTO = new UsuarioLockedDTO();
-        usuarioLockedDTO.setUsuario(usuario);
-        usuarioLockedDTO.setEstado(estado);
-        when(mockUsuarioLockedExec.findUserEstado(anyString())).thenReturn(usuarioLockedDTO);
-    }
-
-    private String generateOtpAtTime(long time) throws Exception {
-        UsuarioDTO usuarioDTO = new UsuarioDTOBuilder().build();
-        String uniqueWord = usuarioDTO.getApplication() + "-000000";
-        this.keyBytes = uniqueWord.getBytes();
-        Method method = CalculatorServiceBean.class.getDeclaredMethod("generateConvertedToken", byte[].class, long.class);
-        method.setAccessible(true);
-        int otp = (int) method.invoke(calculatorServiceBean, keyBytes, time);
-        return String.format("%06d", otp);
-    }
-
-    @Test
-    public void testPublicValidate_DefaultValues_ShouldReturnTrue() throws Exception {
-        UsuarioDTO usuarioDTO = new UsuarioDTOBuilder().build();
-        when(mockQueryExecutor.findUsuarioByUsername(anyString())).thenReturn(usuarioDTO);
-        configureUsuarioLockedDTO(usuarioDTO.getUsuario(), true);
-        String otp = generateOtpAtTime(currentUnixTime);
-
-        boolean result = calculatorServiceBean.publicValidate(usuarioDTO.getUsuario(), otp);
-        assertTrue(result);
-    }
-
-    @Test
-    public void testPublicValidate_CustomUser_ShouldReturnTrue() throws Exception {
-        UsuarioDTO usuarioDTO = new UsuarioDTOBuilder()
-                .withUsuario("jose.perez")
-                .withApplication("AppJose")
-                .build();
-
-        when(mockQueryExecutor.findUsuarioByUsername(anyString())).thenReturn(usuarioDTO);
-        configureUsuarioLockedDTO(usuarioDTO.getUsuario(), true);
-        String otp = generateOtpAtTime(currentUnixTime);
-
-        boolean result = calculatorServiceBean.publicValidate(usuarioDTO.getUsuario(), otp);
-        assertTrue(result);
-    }
-
-    @Test
-    public void testPublicValidate_UserBlocked_ShouldReturnFalse() throws Exception {
-        UsuarioDTO usuarioDTO = new UsuarioDTOBuilder()
-                .withUsuario("blocked.user")
-                .withApplication("BlockedApp")
-                .build();
-
-        when(mockQueryExecutor.findUsuarioByUsername(anyString())).thenReturn(usuarioDTO);
-        configureUsuarioLockedDTO(usuarioDTO.getUsuario(), false);
-        String otp = generateOtpAtTime(currentUnixTime);
-
-        boolean result = calculatorServiceBean.publicValidate(usuarioDTO.getUsuario(), otp);
-        assertFalse(result);
-    }
-
-    @Test
-    public void testPublicValidate_ExpiredOtp_ShouldReturnFalse() throws Exception {
-        UsuarioDTO usuarioDTO = new UsuarioDTOBuilder()
-                .withUsuario("exp.user")
-                .withApplication("ExpApp")
-                .build();
-
-        when(mockQueryExecutor.findUsuarioByUsername(anyString())).thenReturn(usuarioDTO);
-        configureUsuarioLockedDTO(usuarioDTO.getUsuario(), true);
-        String otp = generateOtpAtTime(currentUnixTime - 100000); // OTP expirado
-
-        boolean result = calculatorServiceBean.publicValidate(usuarioDTO.getUsuario(), otp);
-        assertFalse(result);
-    }
+    usuarios.forEach(System.out::println);
 }
-
 ```
