@@ -113,3 +113,74 @@ public void testOrdenarUsuariosPorApplicationAsc() {
     usuarios.forEach(System.out::println);
 }
 ```
+
+Ordenamineto multiple
+```
+✅ Método genérico de ordenación por múltiples campos
+java
+Copiar
+Editar
+import java.util.*;
+import java.util.function.Function;
+
+public class GenericSorter {
+
+    public static <T> void ordenarListaPorMultiplesCampos(
+            List<T> lista,
+            List<Function<T, ? extends Comparable>> extractors,
+            List<Boolean> ascendentes) {
+
+        if (extractors.size() != ascendentes.size()) {
+            throw new IllegalArgumentException("El número de extractores y banderas de orden deben coincidir");
+        }
+
+        Comparator<T> comparator = Comparator.comparing(
+                extractors.get(0),
+                Comparator.nullsLast(Comparator.naturalOrder())
+        );
+
+        if (!ascendentes.get(0)) {
+            comparator = comparator.reversed();
+        }
+
+        for (int i = 1; i < extractors.size(); i++) {
+            Comparator<T> nextComparator = Comparator.comparing(
+                    extractors.get(i),
+                    Comparator.nullsLast(Comparator.naturalOrder())
+            );
+            if (!ascendentes.get(i)) {
+                nextComparator = nextComparator.reversed();
+            }
+            comparator = comparator.thenComparing(nextComparator);
+        }
+
+        lista.sort(comparator);
+    }
+}
+✅ Ejemplo de uso en tu caso:
+java
+Copiar
+Editar
+List<UsuarioDTO> usuarios = new ArrayList<>();
+usuarios.add(new UsuarioDTO("L00001", "benito", "benito.alvez", "appB", "2020-10-16 01:02:03.999"));
+usuarios.add(new UsuarioDTO("L00002", "alan", "alan.roldan", "appC", "2024-05-06 01:02:03.999"));
+usuarios.add(new UsuarioDTO("L00004", "luisa", "luisa.orrego", "appA", "2025-04-06 01:02:03.999"));
+usuarios.add(new UsuarioDTO("L00003", "roberta", "roberta.canizales", "appA", "2018-01-06 01:02:03.999"));
+
+// Ordenar por aplicación (ascendente), luego por fecha de modificación (descendente)
+GenericSorter.ordenarListaPorMultiplesCampos(
+    usuarios,
+    Arrays.asList(UsuarioDTO::getApplication, UsuarioDTO::getFechaModificacion),
+    Arrays.asList(true, false) // ascendente para aplicación, descendente para fecha
+);
+
+usuarios.forEach(System.out::println);
+✅ Resultado esperado
+bash
+Copiar
+Editar
+UsuarioDTO{identificacion='L00004', nombre='luisa', usuario='luisa.orrego', application='appA', fechaModificacion='2025-04-06 01:02:03.999'}
+UsuarioDTO{identificacion='L00003', nombre='roberta', usuario='roberta.canizales', application='appA', fechaModificacion='2018-01-06 01:02:03.999'}
+UsuarioDTO{identificacion='L00001', nombre='benito', usuario='benito.alvez', application='appB', fechaModificacion='2020-10-16 01:02:03.999'}
+UsuarioDTO{identificacion='L00002', nombre='alan', usuario='alan.roldan', application='appC', fechaModificacion='2024-05-06 01:02:03.999'}
+```
