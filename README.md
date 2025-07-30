@@ -90,3 +90,75 @@ public class UserRepository {
         return result;
     }
 }
+
+
+import org.junit.Test;
+import org.mockito.ArgumentCaptor;
+
+import java.util.Arrays;
+import java.util.Collection;
+import java.util.List;
+
+import static org.junit.Assert.assertEquals;
+import static org.mockito.Mockito.verify;
+
+public class UserRepositoryTest_Whitebox {
+
+    // Tus mocks y el captor de SQL...
+    // @Mock private EntityManager mockEntityManager;
+    // @Mock private Query mockQuery;
+    // private ArgumentCaptor<String> sqlCaptor;
+    // private ArgumentCaptor<String> paramNameCaptor;
+    // private ArgumentCaptor<Object> paramValueCaptor;
+
+    // ... (Tu setUp() se mantiene igual)
+
+    @Test
+    public void testDeleteCustom_logginSqlFinal() throws Exception {
+        // GIVEN
+        String email = "test@example.com";
+        Collection<String> usernames = Arrays.asList("user1", "user2", "user3");
+
+        // WHEN
+        userRepository.deleteCustom(email, usernames);
+
+        // THEN
+        // 1. Capturar el SQL base
+        verify(mockEntityManager).createNativeQuery(sqlCaptor.capture());
+        String capturedSql = sqlCaptor.getValue();
+        
+        // 2. Capturar todos los parámetros
+        // El comportamiento para capturar ya se definió en setUp()
+        verify(mockQuery).setParameter(anyString(), any());
+        List<String> allCapturedParamNames = paramNameCaptor.getAllValues();
+        List<Object> allCapturedParamValues = paramValueCaptor.getAllValues();
+
+        // 3. Reconstruir la consulta completa con los parámetros
+        //    (Esto es lo que nos interesa)
+        String finalSql = capturedSql;
+        for (int i = 0; i < allCapturedParamNames.size(); i++) {
+            String paramName = allCapturedParamNames.get(i);
+            Object paramValue = allCapturedParamValues.get(i);
+
+            // Reemplazar el placeholder por el valor, escapando para SQL si es un String.
+            // Para fines de logging, solo reemplazaremos el placeholder por el valor entre comillas.
+            if (paramValue instanceof String) {
+                finalSql = finalSql.replace(":" + paramName, "'" + paramValue + "'");
+            } else {
+                finalSql = finalSql.replace(":" + paramName, String.valueOf(paramValue));
+            }
+        }
+        
+        System.out.println("--- Consulta SQL final reconstruida ---");
+        System.out.println(finalSql);
+        System.out.println("------------------------------------");
+
+        // Ahora puedes hacer tus verificaciones, sabiendo exactamente cómo se ve la consulta.
+        // Ejemplo:
+        String expectedSqlFragment = "WHERE email = 'test@example.com' AND username NOT IN ('user1', 'user2', 'user3')";
+        // Nota: El orden de los parámetros en el string `finalSql` depende del orden de la colección original.
+        assertEquals(true, finalSql.contains(expectedSqlFragment));
+        
+        // ... (el resto de tus verificaciones)
+    }
+}
