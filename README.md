@@ -162,3 +162,76 @@ public class UserRepositoryTest_Whitebox {
         // ... (el resto de tus verificaciones)
     }
 }
+
+
+```
+// Nuevo método privado para construir la SQL completa de forma segura
+private String buildFinalSql(Collection<String> usernames) {
+    // Definimos las partes de la consulta
+    String sqlBase = "DELETE FROM users WHERE email = ?1 AND username NOT IN (";
+    String sqlSuffix = ")";
+
+    // Usamos un StringBuilder para construir la parte de los placeholders de forma segura
+    StringBuilder inClausePlaceholders = new StringBuilder();
+    for (int i = 0; i < usernames.size(); i++) {
+        if (i > 0) {
+            inClausePlaceholders.append(", ");
+        }
+        inClausePlaceholders.append("?").append(i + 2); // Empezamos en el índice 2
+    }
+
+    // Construimos la consulta final concatenando las partes
+    return sqlBase + inClausePlaceholders.toString() + sqlSuffix;
+}
+Ahora, tu método deleteCustom ya no necesitaría String.format() y SonarQube no debería emitir la advertencia.
+
+Cómo se vería tu método deleteCustom refactorizado:
+Java
+
+public boolean deleteCustom(String email, Collection<String> myUsernames) {
+    boolean result = false;
+    
+    if (myUsernames == null || myUsernames.isEmpty()) {
+        System.out.println("No usernames provided for exclusion.");
+        return false;
+    }
+    
+    // Ahora llamamos al nuevo método para construir la SQL completa
+    String finalSql = buildFinalSql(myUsernames);
+
+    EntityTransaction transaction = null;
+
+    try {
+        transaction = this.em.getTransaction();
+        transaction.begin();
+
+        Query query = this.em.createNativeQuery(finalSql);
+
+        // Setear el primer parámetro (email)
+        query.setParameter(1, email);
+
+        // Setear los parámetros de username individualmente
+        int parameterIndex = 2; // El primer parámetro es el email
+        for (String username : myUsernames) {
+            query.setParameter(parameterIndex, username);
+            parameterIndex++;
+        }
+
+        int rowsAffected = query.executeUpdate();
+        transaction.commit();
+        result = rowsAffected > 0;
+
+    } catch (PersistenceException e) { // Asegúrate de que el catch sea para esta excepción
+        if (transaction != null && transaction.isActive()) {
+            transaction.rollback();
+        }
+        e.printStackTrace();
+        result = false;
+    } finally {
+        if (this.em != null && this.em.isOpen()) {
+            this.em.close();
+        }
+    }
+    return result;
+}
+```
