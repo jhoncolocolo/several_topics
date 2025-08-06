@@ -1,50 +1,70 @@
 ```
-import json
+Claro que sí, me complace ayudarte.
 
-def lambda_handler(event, context):
-    """
-    Función de ejemplo "Hola Mundo" para AWS Lambda.
-    """
-    # TODO: Agrega más lógica aquí
-    
-    return {
-        'statusCode': 200,
-        'body': json.dumps('¡Hola desde Lambda! Este es un "Hola Mundo".')
-    }
+Para iniciar un proyecto de Angular con Docker sin tener Node.js instalado directamente en tu máquina, estás en lo correcto. Docker se encargará de todo lo que necesitas al usar una imagen que ya contenga Node.js y las herramientas de Angular.
 
-test_main.py
-Para probar la función de Lambda, crearemos un test unitario usando el módulo unittest de Python. Este test verificará que la función lambda_handler devuelve el statusCode esperado y el cuerpo del mensaje correcto.
+Aquí te presento dos opciones sencillas para lograrlo.
 
-Python
+Opción 1: Crear una imagen personalizada con Dockerfile
+Esta es la mejor opción a largo plazo porque te da un control completo sobre el entorno. Solo necesitas crear un archivo llamado Dockerfile en la raíz de tu proyecto.
 
-import unittest
-import json
-from src.lambda_function import lambda_handler
+Crea el archivo Dockerfile:
+En la raíz de tu proyecto, crea un archivo sin extensión llamado Dockerfile con este contenido:
 
-class TestLambdaFunction(unittest.TestCase):
-    """
-    Clase de prueba para lambda_function.py.
-    """
-    def test_lambda_handler_success(self):
-        """
-        Prueba que la función lambda_handler devuelve un 'statusCode' 200 y el cuerpo del mensaje esperado.
-        """
-        # Simulamos un evento y un contexto, aunque para esta prueba no se usan.
-        event = {}
-        context = {}
-        
-        # Invocamos la función de Lambda
-        response = lambda_handler(event, context)
-        
-        # Verificamos el código de estado
-        self.assertEqual(response['statusCode'], 200)
-        
-        # Verificamos el cuerpo del mensaje.
-        # json.loads() es necesario porque el cuerpo del mensaje está en formato JSON.
-        body = json.loads(response['body'])
-        self.assertEqual(body, '¡Hola desde Lambda! Este es un "Hola Mundo".')
+Dockerfile
 
-if __name__ == '__main__':
-    unittest.main()
-python -m unittest tests/test_main.py
+# Usa una imagen base que ya tenga Node.js
+FROM node:18-alpine
+
+# Establece el directorio de trabajo dentro del contenedor
+WORKDIR /app
+
+# Copia los archivos de tu proyecto al contenedor
+COPY . .
+
+# Instala las dependencias de Node
+RUN npm install
+
+# Expone el puerto por defecto de Angular (4200)
+EXPOSE 4200
+
+# Comando para iniciar la aplicación cuando el contenedor se ejecute
+CMD ["ng", "serve", "--host", "0.0.0.0"]
+Construye la imagen:
+Abre una terminal en la raíz de tu proyecto y ejecuta este comando. Reemplaza mi-app-angular con el nombre que quieras para tu imagen.
+
+Bash
+
+docker build -t mi-app-angular .
+Ejecuta el contenedor:
+Una vez que la imagen esté lista, puedes iniciar tu proyecto con este comando.
+
+Bash
+
+docker run -p 4200:4200 mi-app-angular
+Ahora tu aplicación estará accesible en el navegador en http://localhost:4200.
+
+Opción 2: Usar una imagen existente para un comando único
+Si solo necesitas ejecutar un comando específico sin montar un proyecto completo, puedes usar esta opción. Es más rápida, pero el contexto del proyecto no se guarda.
+
+Este comando ejecuta una imagen de Node y Angular, instala las dependencias de tu proyecto y lo sirve. Es útil para pruebas rápidas.
+
+Bash
+
+docker run --rm -it -v $(pwd):/app -p 4200:4200 node:18-alpine /bin/sh -c "cd /app && npm install && ng serve --host 0.0.0.0"
+Explicación del comando:
+
+docker run: Inicia un nuevo contenedor.
+
+--rm: Elimina el contenedor automáticamente al detenerlo.
+
+-it: Permite la interacción con el contenedor.
+
+-v $(pwd):/app: Monta el directorio actual de tu máquina ($(pwd)) en el directorio /app del contenedor. Esto es clave para que Docker pueda ver tu código.
+
+-p 4200:4200: Mapea el puerto 4200 del contenedor al puerto 4200 de tu máquina.
+
+node:18-alpine: La imagen de Docker que se usará.
+
+/bin/sh -c "...": Ejecuta una serie de comandos dentro del contenedor: cd /app, npm install y ng serve --host 0.0.0.0.
 ```
