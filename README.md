@@ -1,87 +1,17 @@
 ```
-package myProject.service;
+SELECT
+  -- Usa la función COUNT y un CASE para contar los registros del 17 de agosto
+  COUNT(CASE WHEN DAY(FECHA) = 17 THEN 1 ELSE NULL END) AS Registros_Dia_17,
 
-import static org.mockito.Mockito.*;
-import static org.junit.Assert.*;
+  -- Cuenta los registros del 18 de agosto
+  COUNT(CASE WHEN DAY(FECHA) = 18 THEN 1 ELSE NULL END) AS Registros_Dia_18,
 
-import java.util.Arrays;
-import java.util.List;
+  -- Cuenta los registros del 19 de agosto
+  COUNT(CASE WHEN DAY(FECHA) = 19 THEN 1 ELSE NULL END) AS Registros_Dia_19
 
-import myProject.domain.entity.MyUserData;
-import myProject.domain.entity.UserArtefactoEmisoraId;
-import myProject.domain.entity.UserDataEntity;
-import myProject.domain.entity.UserDataId;
-import myProject.repository.dao.UserArtefactoEmisoraDaoRepository;
-
-import org.junit.Before;
-import org.junit.Test;
-import org.mockito.ArgumentCaptor;
-import org.mockito.Mock;
-import org.mockito.MockitoAnnotations;
-
-public class RegistrarImplServiceTest {
-
-    @Mock
-    private UserArtefactoEmisoraDaoRepository userArtefactoEmisoraDaoRepository;
-
-    private RegistrarImplService registrarImplService;
-
-    @Before
-    public void setUp() {
-        MockitoAnnotations.initMocks(this);
-        registrarImplService = new RegistrarImplService(userArtefactoEmisoraDaoRepository);
-    }
-
-    @Test
-    public void testDisableAllUserArtefactoEmisoraByArtefactoId_updatesCondition() {
-        // Arrange
-        String artefactoId = "ART123";
-        String user = "usuario1";
-
-        // Creamos datos simulados
-        UserDataEntity entityActivo = new UserDataEntity();
-        entityActivo.setCondition("A");
-        entityActivo.setId(buildMyUserData(user, artefactoId, "EMISORA1"));
-
-        UserDataEntity entityInactivo = new UserDataEntity();
-        entityInactivo.setCondition("I");
-        entityInactivo.setId(buildMyUserData(user, artefactoId, "EMISORA2"));
-
-        List<UserDataEntity> mockList = Arrays.asList(entityActivo, entityInactivo);
-
-        when(userArtefactoEmisoraDaoRepository.findAllByIdArtefacto(eq(artefactoId), eq(user), anyList()))
-                .thenReturn(mockList);
-
-        // Act
-        registrarImplService.disableAllUserArtefactoEmisoraByArtefactoId(artefactoId, user);
-
-        // Assert
-        ArgumentCaptor<List<UserDataEntity>> captor = ArgumentCaptor.forClass(List.class);
-        verify(userArtefactoEmisoraDaoRepository, times(1)).save(captor.capture());
-
-        List<UserDataEntity> savedEntities = captor.getValue();
-
-        // Verificamos que el primero cambió de A -> I
-        UserDataEntity updatedEntity1 = savedEntities.get(0);
-        assertEquals("I", updatedEntity1.getCondition());
-
-        // El segundo ya estaba I y se mantiene
-        UserDataEntity updatedEntity2 = savedEntities.get(1);
-        assertEquals("I", updatedEntity2.getCondition());
-    }
-
-    // Método auxiliar para crear la estructura del ID
-    private MyUserData buildMyUserData(String usuario, String artefactoId, String emisora) {
-        UserDataId userDataId = new UserDataId();
-        userDataId.setUsuarioFk(usuario);
-        userDataId.setArtefactoId(artefactoId);
-
-        MyUserData myUserData = new MyUserData();
-        myUserData.setUserDataKey(userDataId);
-        myUserData.setEmisoraFk(emisora);
-
-        return myUserData;
-    }
-}
-
+FROM TABLA_REGISTROS
+WHERE
+  -- Filtra por el rango de fechas para mejorar el rendimiento
+  DATE(FECHA) BETWEEN '2025-08-17' AND '2025-08-19'
+  AND DETALLE IN ('detalle 1', 'detalle 2', 'detalle 3');
 ```
