@@ -1,17 +1,37 @@
 ```
-SELECT
-  -- Usa la función COUNT y un CASE para contar los registros del 17 de agosto
-  COUNT(CASE WHEN DAY(FECHA) = 17 THEN 1 ELSE NULL END) AS Registros_Dia_17,
+sequenceDiagram
+  autonumber
+  participant P as Pipeline
+  participant MS as Microservicio
+  participant DB as Base de datos
+  participant FGA as API de OpenFGA
 
-  -- Cuenta los registros del 18 de agosto
-  COUNT(CASE WHEN DAY(FECHA) = 18 THEN 1 ELSE NULL END) AS Registros_Dia_18,
+  Note over P,MS: El Pipeline inicia el proceso con un parámetro (0, 1 o 2)
 
-  -- Cuenta los registros del 19 de agosto
-  COUNT(CASE WHEN DAY(FECHA) = 19 THEN 1 ELSE NULL END) AS Registros_Dia_19
+  P->>MS: Ejecutar migración(se_migro = 0 | 1 | 2)
 
-FROM TABLA_REGISTROS
-WHERE
-  -- Filtra por el rango de fechas para mejorar el rendimiento
-  DATE(FECHA) BETWEEN '2025-08-17' AND '2025-08-19'
-  AND DETALLE IN ('detalle 1', 'detalle 2', 'detalle 3');
+  alt se_migro == 0 (no migrados)
+    MS->>DB: SELECT * FROM USUARIO WHERE se_migro = 0
+    DB-->>MS: Conjunto de usuarios no migrados
+    MS->>MS: Cruza USUARIO_CUENTA y USUARIO_CLIENTE_TIPOPAIS<br/>Mapea a tuplas (dueno / ayudante / es_cliente)
+    loop por usuario o por lote
+      MS->>FGA: /writeTuples (crear tuplas)
+      FGA-->>MS: Resultado (éxitos/errores, metadatos)
+    end
+    MS-->>P: Resumen customizado (creadas, fallidas, tiempos)
+  else se_migro == 1
+    MS->>DB: SELECT * FROM USUARIO ... (regla de negocio para 1)
+    DB-->>MS: Conjunto de registros
+    MS->>MS: Procesa según regla de negocio para 1 (p.ej. solo verificación)
+    MS-->>P: Resumen (sin escritura o validaciones)
+  else se_migro == 2
+    MS->>DB: SELECT * FROM USUARIO ... (regla de negocio para 2)
+    DB-->>MS: Conjunto de registros
+    MS->>MS: Genera/actualiza tuplas según regla de negocio para 2
+    MS->>FGA: /writeTuples (upsert/forzar)
+    FGA-->>MS: Resultado (éxitos/errores)
+    MS-->>P: Resumen customizado (reprocesados, actualizados)
+  end
+
+  Note over MS,FGA: OpenFGA valida contra el modelo y persiste las tuplas
 ```
