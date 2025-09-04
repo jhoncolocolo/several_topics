@@ -1,54 +1,24 @@
-Para redactar el requerimiento para un equipo de DevOps, debes ser claro y conciso, detallando los pasos clave y las tecnologías involucradas. Aquí te muestro cómo podrías estructurar la solicitud para el pipeline, dividida en secciones para mayor claridad.
+¡Claro! Con gusto te ayudo a estructurar una historia de usuario que el equipo de DevOps pueda entender y ejecutar. La clave es ser muy claro con el objetivo y los criterios de aceptación.
 
-Requerimiento de Pipeline de CI/CD para Microservicio Java
-Se solicita la creación de un pipeline de CI/CD para un microservicio desarrollado en Java 17 con Spring Boot. El objetivo es automatizar la compilación, empaquetado y despliegue del servicio en un servidor PQS, obteniendo las variables de configuración desde Azure Key Vault.
+Aquí tienes una propuesta de cómo podrías redactar esa historia de usuario y las tareas asociadas.
 
-Pasos del Pipeline
-Activación y Compilación:
+Historia de Usuario
+Como desarrollador,
+Quiero que el pipeline de CI/CD compile y despliegue automáticamente mi aplicación Java "Hola Mundo"
+Para que pueda verificar que los cambios funcionan correctamente en un servidor de AWS y estén disponibles a través de un endpoint.
 
-El pipeline debe activarse automáticamente al realizar un push o un pull request a la rama principal (ej. main o develop) del repositorio de código.
+Criterios de Aceptación
+La aplicación debe compilarse correctamente en un archivo .jar.
 
-Debe compilar el proyecto Spring Boot utilizando Maven o Gradle para generar un archivo JAR ejecutable.
+El pipeline debe subir el archivo .jar compilado a Artifactory/Nexus/LG Frog.
 
-Configuración de Variables de Entorno:
+El pipeline debe conectarse de forma segura al servidor de Linux llamado "Mi Géminis Preferido" en AWS.
 
-El pipeline debe conectarse a un Azure Key Vault para obtener los valores de cinco variables de entorno.
+El pipeline debe descargar el .jar desde LG Frog al servidor de Linux.
 
-Las variables son:
+El pipeline debe detener cualquier instancia anterior de la aplicación, si existe, y arrancar la nueva.
 
-AZURE_VAR_1
+El endpoint GET /api/v1/hola debe ser accesible y devolver la respuesta esperada.
 
-AZURE_VAR_2
+La ejecución exitosa del pipeline debe confirmar que la aplicación está funcionando en el servidor.
 
-AZURE_VAR_3
-
-AZURE_VAR_4
-
-AZURE_VAR_5
-
-Estas variables deben ser inyectadas en el archivo de propiedades del proyecto (application.properties o application.yml) durante la fase de empaquetado o antes de la ejecución. Es fundamental que estos valores se mantengan seguros y no se expongan en los logs del pipeline.
-
-Empaquetado y Publicación:
-
-Una vez generado el JAR, el pipeline debe subir el artefacto al repositorio de artefactos JFrog Artifactory.
-
-El nombre del artefacto debe seguir una convención estándar (ej. nombre-microservicio-version.jar).
-
-Despliegue en Servidor PQS:
-
-Después de la publicación en JFrog, el pipeline debe conectar al servidor PQS (via SSH, por ejemplo).
-
-Debe descargar el JAR del repositorio de JFrog.
-
-Debe detener el proceso actual del microservicio (si está en ejecución).
-
-Debe iniciar el nuevo JAR, asegurándose de que el endpoint /hello-world esté accesible y retorne la respuesta esperada.
-
-Consideraciones Adicionales
-Se requiere que el equipo de DevOps defina y documente la estructura del archivo YAML del pipeline.
-
-El pipeline debe incluir notificaciones de éxito o fallo a un canal de comunicación (ej. Slack, Teams, email).
-
-Se espera que la configuración para la conexión a Azure Key Vault y JFrog se realice de forma segura, utilizando credenciales de servicio o service principals.
-
-Este requerimiento es directo y proporciona toda la información necesaria para que el equipo de DevOps entienda qué se necesita construir y cómo debe funcionar el flujo de despliegue.
