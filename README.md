@@ -202,3 +202,86 @@ Te doy un CloudFormation / SAM template completo que cree las 2 colas, la DLQ, l
 Te doy un script bash completo que ejecuta las órdenes CLI en el orden correcto (crea colas, rol, empaqueta la lambda y crea el mapping) — útil si prefieres CLI.
 
 Dime cuál prefieres y te lo genero ahora mismo. ✅
+
+
+
+
+✅ Solución paso a paso
+1. Verifica tu ubicación actual
+
+Ejecuta:
+
+pwd
+
+
+Eso muestra la carpeta actual.
+Ejemplo:
+
+/home/usuario/proyecto
+
+2. Crea el archivo trust-policy.json
+
+Crea el archivo en esa misma carpeta (usa tu editor o ejecuta este comando directamente en la terminal):
+
+cat > trust-policy.json <<'EOF'
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Principal": {
+        "Service": "lambda.amazonaws.com"
+      },
+      "Action": "sts:AssumeRole"
+    }
+  ]
+}
+EOF
+
+
+Esto genera un archivo válido con la política de confianza para Lambda.
+Puedes verificarlo con:
+
+cat trust-policy.json
+
+
+Debería mostrar exactamente el JSON anterior.
+
+3. Ahora sí crea el rol IAM
+
+Una vez tengas el archivo en el mismo directorio, ejecuta:
+
+ROLE_NAME=LambdaSQSExecutionRolePersonal
+aws iam create-role \
+  --role-name "$ROLE_NAME" \
+  --assume-role-policy-document file://trust-policy.json
+
+
+🔸 El prefijo file:// debe apuntar a la ruta completa o relativa del archivo.
+Si el archivo está en otra carpeta, usa la ruta completa, por ejemplo:
+
+--assume-role-policy-document file:///home/usuario/proyecto/trust-policy.json
+
+4. Comprueba que el rol se creó correctamente
+aws iam get-role --role-name "$ROLE_NAME" --query 'Role.Arn' --output text
+
+
+Deberías ver algo como:
+
+arn:aws:iam::123456789012:role/LambdaSQSExecutionRolePersonal
+
+
+¿Quieres que te genere ahora un script Bash completo (copiar-pegar) que te cree:
+
+el archivo trust-policy.json,
+
+el rol IAM,
+
+las colas SQS (principal y DLQ),
+
+la Lambda,
+
+y el event source mapping,
+
+todo con variables y comprobaciones de errores?
+Así te aseguras que corra de principio a fin sin fallos.
