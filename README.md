@@ -223,6 +223,7 @@ Ejemplo:
 
 Crea el archivo en esa misma carpeta (usa tu editor o ejecuta este comando directamente en la terminal):
 
+```
 cat > trust-policy.json <<'EOF'
 {
   "Version": "2012-10-17",
@@ -237,6 +238,8 @@ cat > trust-policy.json <<'EOF'
   ]
 }
 EOF
+
+```
 
 
 Esto genera un archivo válido con la política de confianza para Lambda.
