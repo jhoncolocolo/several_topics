@@ -1,290 +1,311 @@
-1) Resumen de arquitectura (qué vamos a crear)
+# 🧩 Proyecto Lambda + SQS con Terraform
 
-Cola principal (Standard o FIFO) — MiColaPrincipal.
+Este proyecto implementa una arquitectura **Lambda + SQS + DLQ (Dead Letter Queue)** usando **Terraform** y **AWS CLI (PowerShell)**.  
+Permite desplegar una función Lambda que procesa mensajes de una cola SQS principal, y en caso de error, los mensajes fallidos se envían automáticamente a una cola de errores (DLQ).
 
-Dead-Letter Queue (DLQ) — MiColaDLQ.
+---
 
-Lambda function (ej. miLambdaProcesadora) con rol que le permita leer SQS.
+## 📁 Estructura de Archivos
 
-Event source mapping (SQS → Lambda) para que Lambda reciba mensajes en batches.
+```
+.
+├── main.tf              # Código Terraform para crear los recursos
+├── lambda_function.py   # Lógica principal de la Lambda
+├── trust-policy.json    # Política de confianza para IAM Role
+├── msg_ok.json          # Mensaje exitoso de prueba
+└── msg_fail.json        # Mensaje que genera error (para probar la DLQ)
+```
 
-RedrivePolicy en la cola principal que indique deadLetterTargetArn y maxReceiveCount (cuántos intentos antes de mandar a DLQ).
+---
 
-Pruebas: enviar mensajes con aws sqs send-message, verificar CloudWatch + mensajes en DLQ. 
-docs.aws.amazon.com
-+1
+## 🧠 Explicación del Flujo
 
-2) Crear colas (AWS CLI)
+1. **SQS Principal** recibe mensajes.
+2. **Lambda** se activa automáticamente al recibir mensajes.
+3. Si el procesamiento **falla**, la Lambda lanza una excepción → el mensaje se reintenta hasta 3 veces.
+4. Si aún falla, **SQS envía el mensaje a la DLQ**.
+5. Todo el proceso se registra en **CloudWatch Logs**.
 
-Asumo que tienes aws configurado (aws configure) con credenciales y región.
+---
 
-Crear DLQ:
+## ⚙️ Archivos Clave
 
-aws sqs create-queue --queue-name MiColaDLQ
-# Guarda la URL de respuesta y obtén su ARN:
-DLQ_URL=$(aws sqs get-queue-url --queue-name MiColaDLQ --query 'QueueUrl' --output text)
-DLQ_ARN=$(aws sqs get-queue-attributes --queue-url "$DLQ_URL" --attribute-names QueueArn --query 'Attributes.QueueArn' --output text)
-echo "DLQ_ARN=$DLQ_ARN"
-
-
-Crear cola principal con RedrivePolicy
-maxReceiveCount = número de intentos antes de mover a DLQ (ej. 3).
-
-aws sqs create-queue --queue-name MiColaPrincipal \
-  --attributes RedrivePolicy="{\"deadLetterTargetArn\":\"$DLQ_ARN\",\"maxReceiveCount\":\"3\"}"
-  
-MAIN_URL=$(aws sqs get-queue-url --queue-name MiColaPrincipal --query 'QueueUrl' --output text)
-MAIN_ARN=$(aws sqs get-queue-attributes --queue-url "$MAIN_URL" --attribute-names QueueArn --query 'Attributes.QueueArn' --output text)
-echo "MAIN_ARN=$MAIN_ARN"
-
-
-Nota: para FIFO usa --attributes FifoQueue=true y nombres terminados en .fifo. La DLQ debe ser del mismo tipo. 
-docs.aws.amazon.com
-+1
-
-3) Crear rol IAM para la Lambda
-
-Puedes usar la política gestionada AWSLambdaSQSQueueExecutionRole (la documentación la recomienda para Lambda que procesa SQS).
-
-Crear rol (JSON de confianza para Lambda) — guarda en trust-policy.json:
-
+### `trust-policy.json`
+```json
 {
-  "Version": "2012-10-17",
-  "Statement": [{
-    "Effect": "Allow",
-    "Principal": { "Service": "lambda.amazonaws.com" },
-    "Action": "sts:AssumeRole"
-  }]
+    "Version": "2012-10-17",
+    "Statement": [{
+      "Effect": "Allow",
+      "Principal": { "Service": "lambda.amazonaws.com" },
+      "Action": "sts:AssumeRole"
+    }]
 }
+```
 
-
-Crear rol y adjuntar la política gestionada + CloudWatchLogs:
-
-ROLE_NAME=LambdaSQSExecutionRolePersonal
-aws iam create-role --role-name $ROLE_NAME --assume-role-policy-document file://trust-policy.json
-
-# Adjuntar la política recomendada para SQS + logs
-aws iam attach-role-policy --role-name $ROLE_NAME --policy-arn arn:aws:iam::aws:policy/service-role/AWSLambdaSQSQueueExecutionRole
-aws iam attach-role-policy --role-name $ROLE_NAME --policy-arn arn:aws:iam::aws:policy/CloudWatchLogsFullAccess
-
-
-La política AWSLambdaSQSQueueExecutionRole le da permiso a Lambda para leer de SQS y las acciones necesarias. 
-docs.aws.amazon.com
-+1
-
-4) Crear la Lambda (ejemplo Python)
-
-Ejemplo mínimo lambda_function.py:
-
-# lambda_function.py
+### `lambda_function.py`
+```python
 import json
 
 def lambda_handler(event, context):
-    # event["Records"] es la lista de mensajes SQS
-    for record in event.get("Records", []):
-        body = json.loads(record["body"])
-        # ejemplo: si body["process_ok"] == False -> lanzamos excepción para simular fallo
-        if not body.get("process_ok", True):
-            raise ValueError(f"Procesamiento falló para item_id={body.get('item_id')}")
-        print(f"Procesado OK: {body.get('item_id')}")
-    return {"status": "done"}
+    results = []
+    for record in event['Records']:
+        try:
+            body = json.loads(record['body'])
+            print(f"📨 Mensaje recibido: {body}")
 
+            # Simular procesamiento
+            if not body.get("process_ok", True):
+                raise ValueError(f"❌ Error procesando item_id={body.get('item_id')}")
 
-Empaqueta y sube:
+            # Si todo va bien
+            print(f"✅ Procesado con éxito item_id={body.get('item_id')}")
+            results.append({"item_id": body.get("item_id"), "status": "success"})
 
-zip function.zip lambda_function.py
+        except Exception as e:
+            print(f"⚠️ Excepción capturada: {e}")
+            raise e
 
-ROLE_ARN=$(aws iam get-role --role-name $ROLE_NAME --query 'Role.Arn' --output text)
-
-aws lambda create-function \
-  --function-name miLambdaProcesadora \
-  --runtime python3.11 \
-  --role "$ROLE_ARN" \
-  --handler lambda_function.lambda_handler \
-  --zip-file fileb://function.zip \
-  --timeout 60 \
-  --memory-size 256
-
-
-(ajusta runtime, timeout y memoria según tu función)
-
-5) Conectar SQS → Lambda (Event Source Mapping)
-
-Puedes crear el mapeo con CLI (o agregar el trigger desde la consola Lambda):
-
-aws lambda create-event-source-mapping \
-  --function-name miLambdaProcesadora \
-  --batch-size 10 \
-  --event-source-arn "$MAIN_ARN" \
-  --enabled
-
-
-Parámetros importantes:
-
-batch-size: hasta 10 (FIFO) / hasta 10,000 para standard (pero Lambda limita comportamientos; la doc oficial lista límites).
-
-enabled: true/false.
-Si usas consola, al añadir trigger SQS te pedirá la cola y creará el mapping automáticamente. 
-docs.aws.amazon.com
-+1
-
-6) Ajustes importantes (para comportamiento correcto)
-
-maxReceiveCount (en RedrivePolicy): define después de cuántos fallos se mueve el mensaje a la DLQ. Lo configuraste al crear la cola (ej. 3). 
-docs.aws.amazon.com
-
-Visibility Timeout: debe ser mayor que el tiempo máximo de ejecución de tu Lambda (timeout), para evitar reentregas prematuras. Recomiendo VisibilityTimeout >= Lambda timeout * 2.
-
-Lambda timeout: pon un timeout apropiado (ej. 30-60 s). Si lambda nunca responde (timeout) eso cuenta como fallo y, después de maxReceiveCount, SQS lo moverá a DLQ. 
-docs.aws.amazon.com
-+1
-
-7) Probar (en AWS, con CLI)
-
-Enviar mensaje de éxito:
-
-aws sqs send-message --queue-url "$MAIN_URL" --message-body '{"process_ok": true, "item_id": 100}'
-
-
-Enviar mensaje que provoque fallo:
-
-aws sqs send-message --queue-url "$MAIN_URL" --message-body '{"process_ok": false, "item_id": 200}'
-
-
-Observar:
-
-En CloudWatch Logs del Lambda verás invocaciones y excepciones.
-
-Tras maxReceiveCount fallos, el mensaje aparecerá en la DLQ (usa aws sqs receive-message --queue-url $DLQ_URL).
-Ejemplo para leer DLQ:
-
-aws sqs receive-message --queue-url "$DLQ_URL" --max-number-of-messages 10
-
-
-Si la Lambda lanza excepción para un mensaje del batch, Lambda considera la invocación fallida y no borra los mensajes procesados en ese batch (ocurre reintento según el comportamiento de event source mapping). 
-docs.aws.amazon.com
-
-8) Monitoreo y depuración
-
-CloudWatch Logs: revisa logs de la función para entender fallos.
-
-CloudWatch Metrics: ApproximateNumberOfMessagesVisible en la cola y métricas Lambda (Invocations, Errors, DLQDeliveryFailures).
-
-Dead-Letter monitoring: configura alarmas cuando la DLQ tenga mensajes (p. ej. si ApproximateNumberOfMessagesVisible > 0). 
-docs.aws.amazon.com
-
-9) Opcional — usar Infrastructure as Code
-
-Recomiendo usar CloudFormation, SAM o Serverless Framework para reproducir todo (creación de colas, rol, lambda y event source mapping) de forma declarativa. La doc de AWS::Lambda::EventSourceMapping y los ejemplos SAM facilitan esto. 
-docs.aws.amazon.com
-+1
-
-10) Ejemplo mínimo de flujo de pruebas (resumen rápido)
-
-Crear DLQ.
-
-Crear cola principal con RedrivePolicy apuntando al DLQ (ej. maxReceiveCount = 3).
-
-Crear rol IAM con AWSLambdaSQSQueueExecutionRole.
-
-Crear Lambda (zip) y subirla.
-
-Crear event source mapping con el ARN de la cola.
-
-Enviar mensajes que provoquen process_ok=false y observar cómo después de 3 intentos terminan en DLQ. 
-docs.aws.amazon.com
-+1
-
-Si quieres, hago cualquiera de estas cosas contigo en uno de dos modos (elige uno):
-
-Te doy un CloudFormation / SAM template completo que cree las 2 colas, la DLQ, la función y el mapping (lista para desplegar con sam deploy o aws cloudformation create-stack).
-
-Te doy un script bash completo que ejecuta las órdenes CLI en el orden correcto (crea colas, rol, empaqueta la lambda y crea el mapping) — útil si prefieres CLI.
-
-Dime cuál prefieres y te lo genero ahora mismo. ✅
-
-
-
-
-✅ Solución paso a paso
-1. Verifica tu ubicación actual
-
-Ejecuta:
-
-pwd
-
-
-Eso muestra la carpeta actual.
-Ejemplo:
-
-/home/usuario/proyecto
-
-2. Crea el archivo trust-policy.json
-
-Crea el archivo en esa misma carpeta (usa tu editor o ejecuta este comando directamente en la terminal):
-
-```
-cat > trust-policy.json <<'EOF'
-{
-  "Version": "2012-10-17",
-  "Statement": [
-    {
-      "Effect": "Allow",
-      "Principal": {
-        "Service": "lambda.amazonaws.com"
-      },
-      "Action": "sts:AssumeRole"
+    return {
+        "status": "OK",
+        "processed": results,
+        "records_count": len(results)
     }
-  ]
-}
-EOF
-
 ```
 
+### `main.tf`
+Código Terraform que crea los siguientes recursos:
+- 1 cola **principal (SQS)**
+- 1 cola **DLQ**
+- 1 **Lambda**
+- 1 **IAM Role y Policy** para permitir acceso a SQS y CloudWatch
+- 1 **Event Source Mapping** para conectar Lambda con SQS
 
-Esto genera un archivo válido con la política de confianza para Lambda.
-Puedes verificarlo con:
+Incluye además **outputs útiles** para enviar mensajes desde PowerShell.
 
-cat trust-policy.json
+```terraform
+terraform {
+  required_providers {
+    aws = {
+      source  = "hashicorp/aws"
+      version = "~> 5.0"
+    }
+  }
+}
 
+provider "aws" {
+  region = "us-east-1"
+}
 
-Debería mostrar exactamente el JSON anterior.
+# ========= SQS DLQ ==========
+resource "aws_sqs_queue" "dlq" {
+  name = "${var.custom_name}-dlq"
+}
 
-3. Ahora sí crea el rol IAM
+# ========= SQS principal ==========
+resource "aws_sqs_queue" "main" {
+  name = "${var.custom_name}-main"
 
-Una vez tengas el archivo en el mismo directorio, ejecuta:
+  # RedrivePolicy: enviar a la DLQ después de 3 intentos
+  redrive_policy = jsonencode({
+    deadLetterTargetArn = aws_sqs_queue.dlq.arn
+    maxReceiveCount     = 3
+  })
 
-ROLE_NAME=LambdaSQSExecutionRolePersonal
-aws iam create-role \
-  --role-name "$ROLE_NAME" \
-  --assume-role-policy-document file://trust-policy.json
+  # 👇 visibilidad mayor que el timeout de la Lambda
+  visibility_timeout_seconds = 90
+}
 
+# ========= IAM Role para Lambda ==========
+resource "aws_iam_role" "lambda_role" {
+  name = "${var.custom_name}-lambda-role"
 
-🔸 El prefijo file:// debe apuntar a la ruta completa o relativa del archivo.
-Si el archivo está en otra carpeta, usa la ruta completa, por ejemplo:
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Principal = {
+          Service = "lambda.amazonaws.com"
+        }
+        Action = "sts:AssumeRole"
+      }
+    ]
+  })
+}
 
---assume-role-policy-document file:///home/usuario/proyecto/trust-policy.json
+# ========= IAM Policy inline (logs y SQS) ==========
+resource "aws_iam_role_policy" "lambda_policy" {
+  name = "${var.custom_name}-lambda-policy"
+  role = aws_iam_role.lambda_role.id
 
-4. Comprueba que el rol se creó correctamente
-aws iam get-role --role-name "$ROLE_NAME" --query 'Role.Arn' --output text
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "logs:CreateLogGroup",
+          "logs:CreateLogStream",
+          "logs:PutLogEvents"
+        ]
+        Resource = "arn:aws:logs:*:*:*"
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "sqs:ReceiveMessage",
+          "sqs:DeleteMessage",
+          "sqs:GetQueueAttributes"
+        ]
+        Resource = [
+          aws_sqs_queue.main.arn,
+          aws_sqs_queue.dlq.arn
+        ]
+      }
+    ]
+  })
+}
 
+# ========= Lambda Function ==========
+resource "aws_lambda_function" "lambda" {
+  function_name = "${var.custom_name}-lambda"
+  role          = aws_iam_role.lambda_role.arn
+  handler       = "lambda_function.lambda_handler"
+  runtime       = "python3.11"
+  timeout       = 60
+  memory_size   = 256
+  filename      = "function.zip"
+  source_code_hash = filebase64sha256("function.zip")
+}
 
-Deberías ver algo como:
+# ========= Conectar Lambda con SQS ==========
+resource "aws_lambda_event_source_mapping" "sqs_trigger" {
+  event_source_arn = aws_sqs_queue.main.arn
+  function_name    = aws_lambda_function.lambda.arn
+  batch_size       = 10
+  enabled          = true
+}
 
-arn:aws:iam::123456789012:role/LambdaSQSExecutionRolePersonal
+# ========= Outputs ==========
+output "main_queue_url" {
+  value = aws_sqs_queue.main.url
+}
 
+output "dlq_queue_url" {
+  value = aws_sqs_queue.dlq.url
+}
 
-¿Quieres que te genere ahora un script Bash completo (copiar-pegar) que te cree:
+output "lambda_name" {
+  value = aws_lambda_function.lambda.function_name
+}
 
-el archivo trust-policy.json,
+# ========= Comandos PowerShell para pruebas ==========
+output "send_ok_command" {
+  description = "Comando PowerShell para enviar mensaje OK (usa archivo msg_ok.json)"
+  value = "aws sqs send-message --queue-url ${aws_sqs_queue.main.url} --message-body file://msg_ok.json"
+}
 
-el rol IAM,
+output "send_fail_command" {
+  description = "Comando PowerShell para enviar mensaje de falla (usa archivo msg_fail.json)"
+  value = "aws sqs send-message --queue-url ${aws_sqs_queue.main.url} --message-body file://msg_fail.json"
+}
+```
 
-las colas SQS (principal y DLQ),
+### `variables.tf`
+```terraform
+variable "project_name" {
+  description = "Nombre base del proyecto (se usa como prefijo en las colas y Lambda)"
+  type        = string
+}
 
-la Lambda,
+variable "aws_region" {
+  description = "Región de AWS donde se desplegarán los recursos"
+  type        = string
+  default     = "us-east-1"
+}
 
-y el event source mapping,
+variable "custom_name" {
+  description = "Prefijo personalizado para nombrar los recursos (por ejemplo, mi-lambda-sqs-demo)"
+  type        = string
+}
+```
 
-todo con variables y comprobaciones de errores?
-Así te aseguras que corra de principio a fin sin fallos.
+---
+
+## 🧪 Archivos de Mensajes
+
+### `msg_ok.json`
+```json
+{
+  "process_ok": true,
+  "item_id": 100
+}
+```
+
+### `msg_fail.json`
+```json
+{
+  "process_ok": false,
+  "item_id": 200
+}
+```
+
+---
+
+## 🚀 Despliegue
+
+### 1️⃣ Crear y empacar la Lambda
+```powershell
+Compress-Archive -Path lambda_function.py -DestinationPath function.zip -Force
+```
+
+### 2️⃣ Inicializar Terraform
+```powershell
+terraform init
+terraform apply -auto-approve
+```
+
+### 3️⃣ Ver los outputs
+```powershell
+terraform output
+```
+
+Obtendrás las URLs de las colas y los comandos listos para enviar mensajes.
+
+---
+
+## 🧾 Enviar mensajes de prueba
+
+### Mensaje exitoso
+```powershell
+aws sqs send-message --queue-url "<MAIN_URL>" --message-body file://msg_ok.json
+```
+
+### Mensaje con error (va a la DLQ)
+```powershell
+aws sqs send-message --queue-url "<MAIN_URL>" --message-body file://msg_fail.json
+```
+
+---
+
+## 🧹 Limpieza de recursos
+```powershell
+terraform destroy -auto-approve
+```
+
+---
+
+## 📘 Resumen General
+
+| Componente | Descripción |
+|-------------|-------------|
+| **Lambda** | Procesa mensajes de SQS, lanza excepción si `process_ok = false` |
+| **SQS Main** | Cola principal de mensajes |
+| **SQS DLQ** | Recibe mensajes fallidos tras 3 intentos |
+| **IAM Role/Policy** | Permite a Lambda leer de SQS y escribir en CloudWatch |
+| **Terraform** | Gestiona toda la infraestructura como código |
+| **PowerShell** | Se usa para enviar mensajes de prueba con AWS CLI |
+
+---
+
+> 💡 **Consejo:** Puedes ver los logs en CloudWatch con el nombre del grupo `/aws/lambda/<nombre_lambda>` para verificar el flujo de mensajes.
