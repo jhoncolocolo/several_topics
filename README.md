@@ -940,4 +940,33 @@ def test_exito_despues_de_dos_fallos(monkeypatch):
         assert result3["statusCode"] == 200
 
 ```
-https://risivys.hiruko.com.co:32117/portal/login
+```python
+def test_exito_despues_de_un_fallo(monkeypatch):
+    """
+    Caso: primer intento falla, segundo intento exitoso.
+    """
+    call_count = {"intentos": 0}
+
+    def fake_write(*args, **kwargs):
+        call_count["intentos"] += 1
+        if call_count["intentos"] == 1:
+            raise Exception("Falla en primer intento")
+        # segundo intento exitoso (no lanza nada)
+
+    with patch("services.sqs.SQSService.enviar_a_retry") as mock_retry, \
+         patch("services.sqs.SQSService.enviar_a_dlq") as mock_dlq, \
+         patch("services.cliente_servicio.ClienteServicio.escribir_tupla", side_effect=fake_write):
+
+        # Primer intento → Falla
+        evento = dict(EVENTO_VALIDO)
+        result1 = procesador(evento)
+        assert result1["statusCode"] == 500
+        mock_retry.assert_called_once()
+        mock_dlq.assert_not_called()
+
+        # Segundo intento → Exitoso
+        evento["retry_count"] = 1
+        result2 = procesador(evento)
+        assert result2["statusCode"] == 200
+
+```
