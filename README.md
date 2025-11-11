@@ -699,3 +699,244 @@ Esto eliminará todos los recursos creados (Lambda, SQS, roles, etc.).
 ---
 
 > 💡 Proyecto listo para servir como base en arquitecturas **event-driven resilientes** con AWS Lambda + SQS.
+
+```python
+import json
+import logging
+from dataclasses import dataclass
+from typing import Any, Dict
+import urllib3
+from services.sqs import SQSService
+
+logger = logging.getLogger()
+logger.setLevel(logging.INFO)
+
+sqs = SQSService()
+
+
+# --- Clases y Funciones de Soporte ---
+
+def validador(mensaje: dict) -> bool:
+    """Simula validación de mensaje."""
+    return True
+
+
+def obtener_secreto_microsoft() -> Dict[str, str]:
+    """Simula obtención de configuración o secretos externos."""
+    return {
+        "API_URL": "http://localhost:8000",
+        "STORE_ID": "store-001",
+        "MODELO_ID": "modelo-001"
+    }
+
+
+class OPENFGARELACION:
+    USER_ADMIN = "administrador"
+    USER_OWNER_PROFILE = "owner"
+
+
+@dataclass
+class TuplaLlave:
+    user: str
+    relation: str
+    object: str
+
+
+@dataclass
+class EscribirTupla:
+    tupla_llave: TuplaLlave
+    modelo_autorizacion_id: str
+
+    def to_dic(self) -> Dict[str, Any]:
+        return {
+            "writes": {
+                "tuple_keys": [
+                    {
+                        "user": self.tupla_llave.user,
+                        "relation": self.tupla_llave.relation,
+                        "object": self.tupla_llave.object
+                    }
+                ]
+            },
+            "modelo_autorizacion_id": self.modelo_autorizacion_id
+        }
+
+
+class ClienteServicio:
+    """Simula el servicio web que escribe la tupla en OpenFGA."""
+    def __init__(self, api_url: str, store_id: str):
+        self.url = api_url
+        self.store_id = store_id
+        self.http = urllib3.PoolManager()
+
+    def escribir_tupla(self, request: EscribirTupla) -> None:
+        try:
+            url = f"{self.url}/stores/{self.store_id}/write"
+            headers = {"Content-Type": "application/json"}
+            response = self.http.request(
+                "POST", url, body=json.dumps(request.to_dic()), headers=headers
+            )
+            if response.status >= 400:
+                raise ValueError(f"HTTP {response.status}")
+            logger.info("✅ Tupla escrita con éxito en OpenFGA.")
+        except Exception as e:
+            raise ValueError(f"Error guardando en OpenFGA: {e}")
+
+
+# --- Método Principal ---
+
+def procesador(evento) -> Dict[str, Any]:
+    """
+    Procesa el evento, intenta escribir una tupla en OpenFGA,
+    reenvía a Retry o DLQ según los fallos.
+    """
+    # 📦 Detectar si viene desde SQS
+    if "Records" in evento:
+        record = evento["Records"][0]
+        evento = json.loads(record["body"])
+        logger.info("📦 Mensaje recibido desde SQS: %s", evento)
+
+    # Extraer número de reintento actual (por defecto 0)
+    retry_count = evento.get("retry_count", 0)
+
+    try:
+        mensaje = evento.get("message")
+        if not validador(mensaje):
+            return {"statusCode": 400, "body": "Missing Fields"}
+
+        config_values = obtener_secreto_microsoft()
+
+        cliente = ClienteServicio(
+            api_url=config_values["API_URL"],
+            store_id=config_values["STORE_ID"]
+        )
+
+        tupla_llave = TuplaLlave(
+            user="user_1024",
+            relation=OPENFGARELACION.USER_ADMIN,
+            object=mensaje["data"]["table"]
+        )
+
+        request = EscribirTupla(
+            tupla_llave=tupla_llave,
+            modelo_autorizacion_id=config_values["MODELO_ID"]
+        )
+
+        # 🚀 Intentar escribir tupla (aquí puede fallar)
+        cliente.escribir_tupla(request)
+        logger.info("🟢 Procesamiento exitoso del evento.")
+
+        return {"statusCode": 200, "body": "Se almacena bien los datos"}
+
+    except Exception as e:
+        logger.error("❌ Error procesando mensaje: %s", e)
+
+        # Manejar reintentos
+        if retry_count < 2:
+            new_event = dict(evento)
+            new_event["retry_count"] = retry_count + 1
+            sqs.enviar_a_retry(new_event)
+            logger.info("📤 Mensaje enviado a Retry Queue (intento #%d)", retry_count + 1)
+        else:
+            sqs.enviar_a_dlq(evento)
+            logger.info("💀 Mensaje enviado a DLQ tras fallar los reintentos.")
+
+        return {
+            "statusCode": 500,
+            "body": f"Unexpected Error: {e}"
+        }
+
+```
+
+```python
+from unittest.mock import patch
+from procesador import procesador
+
+EVENTO_VALIDO = {
+    "message": {
+        "hostname": "api.production.internal",
+        "timestamp": "2025-11-10T23:56:44Z",
+        "data": {
+            "event_type": "user_created",
+            "table": "users",
+            "values": {"user_id": 1024}
+        }
+    }
+}
+
+
+def test_exitoso_directo(monkeypatch):
+    with patch("services.sqs.SQSService.enviar_a_retry") as mock_retry, \
+         patch("services.sqs.SQSService.enviar_a_dlq") as mock_dlq, \
+         patch("procesador.ClienteServicio.escribir_tupla", return_value=None):
+        result = procesador(EVENTO_VALIDO)
+        assert result["statusCode"] == 200
+        mock_retry.assert_not_called()
+        mock_dlq.assert_not_called()
+
+
+def test_falla_total_envio_a_dlq(monkeypatch):
+    evento = dict(EVENTO_VALIDO)
+    evento["retry_count"] = 2
+    with patch("services.sqs.SQSService.enviar_a_retry") as mock_retry, \
+         patch("services.sqs.SQSService.enviar_a_dlq") as mock_dlq, \
+         patch("procesador.ClienteServicio.escribir_tupla", side_effect=Exception("Falla")):
+        result = procesador(evento)
+        assert result["statusCode"] == 500
+        mock_retry.assert_not_called()
+        mock_dlq.assert_called_once()
+
+
+def test_exito_despues_de_un_fallo(monkeypatch):
+    call_count = {"intentos": 0}
+
+    def fake_write(_):
+        call_count["intentos"] += 1
+        if call_count["intentos"] == 1:
+            raise Exception("Falla en primer intento")
+
+    with patch("procesador.ClienteServicio.escribir_tupla", side_effect=fake_write) as mock_write, \
+         patch("services.sqs.SQSService.enviar_a_retry") as mock_retry, \
+         patch("services.sqs.SQSService.enviar_a_dlq") as mock_dlq:
+
+        evento = dict(EVENTO_VALIDO)
+        result = procesador(evento)
+
+        # Primer intento falla → Retry
+        assert result["statusCode"] == 500
+        mock_retry.assert_called_once()
+        mock_dlq.assert_not_called()
+
+        # Segundo intento exitoso
+        result2 = procesador(EVENTO_VALIDO)
+        assert result2["statusCode"] == 200
+
+
+def test_exito_despues_de_dos_fallos(monkeypatch):
+    call_count = {"intentos": 0}
+
+    def fake_write(_):
+        call_count["intentos"] += 1
+        if call_count["intentos"] < 3:
+            raise Exception("Falla simulada")
+        # 3er intento es exitoso
+
+    with patch("procesador.ClienteServicio.escribir_tupla", side_effect=fake_write), \
+         patch("services.sqs.SQSService.enviar_a_retry") as mock_retry, \
+         patch("services.sqs.SQSService.enviar_a_dlq") as mock_dlq:
+
+        evento = dict(EVENTO_VALIDO)
+        result = procesador(evento)
+        assert result["statusCode"] == 500
+        assert mock_retry.called
+        assert not mock_dlq.called
+
+        evento["retry_count"] = 1
+        result2 = procesador(evento)
+        assert result2["statusCode"] == 500
+
+        evento["retry_count"] = 2
+        result3 = procesador(evento)
+        assert result3["statusCode"] == 200
+
+```
