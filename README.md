@@ -41,3 +41,52 @@ Si el paso 1 no es suficiente o si la política requiere menos permisos:
     ```bash
     setmqaut -m QMGR_TEST -t qmgr -p UsuarioMQ +connect +inq
     ```
+
+    ```python
+    import json
+
+def lambda_handler(event, context):
+    """
+    Función de ejemplo que simula el procesamiento de un evento.
+    """
+    try:
+        # Intenta obtener el valor de una clave específica del 'event'
+        name = event.get('name', 'Mundo')
+        
+        # Lógica de la función
+        response_message = f"Hola, {name}! Tu función Lambda se ejecutó correctamente."
+        
+        return {
+            'statusCode': 200,
+            'body': json.dumps({'message': response_message})
+        }
+    except Exception as e:
+        # Manejo básico de errores
+        print(f"Error al procesar el evento: {e}")
+        return {
+            'statusCode': 400,
+            'body': json.dumps({'error': str(e)})
+        }
+
+# --- Código para ejecución local (Simulación) ejecuta con python nombre_archivo.py ---
+if __name__ == "__main__":
+    # 1. Define un objeto 'event' de prueba
+    test_event = {
+        "name": "Gemini",
+        "detail": "Prueba de ejecución local"
+    }
+    
+    # 2. Define un objeto 'context' (puede ser un objeto vacío o None para pruebas simples)
+    test_context = None # O un objeto simulado si tu lógica lo requiere
+
+    print("--- Iniciando prueba local ---")
+    
+    # 3. Invoca la función handler
+    result = lambda_handler(test_event, test_context)
+    
+    # 4. Imprime el resultado
+    print("\nResultado del Handler:")
+    print(result)
+    
+    print("\n--- Prueba local finalizada ---")
+    ```
