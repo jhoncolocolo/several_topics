@@ -970,3 +970,231 @@ def test_exito_despues_de_un_fallo(monkeypatch):
         assert result2["statusCode"] == 200
 
 ```
+NUEVO BLOQUE api gateway
+
+variables.tf
+```terraform
+variable "aws_region" {
+  type    = string
+  default = "us-east-1"
+}
+
+variable "project_prefix" {
+  type    = string
+  default = "lambda-msk-sqs-demo"
+}
+
+variable "retry_max_receive_count" {
+  type    = number
+  default = 2
+}
+
+# --- Secretos simulados de OpenFGA ---
+variable "openfga_api_url" {
+  type    = string
+  default = "https://mock-openfga.local" # se reemplaza luego por API Gateway
+}
+
+variable "openfga_store_id" {
+  type    = string
+  default = "store-001"
+}
+
+variable "openfga_modelo_id" {
+  type    = string
+  default = "modelo-001"
+}
+
+```
+main.tf
+```terraform
+# ============================================================
+#  BLOQUE DE SECRETOS EN AWS SECRETS MANAGER
+# ============================================================
+
+resource "aws_secretsmanager_secret" "openfga_secret" {
+  name        = "${var.project_prefix}-openfga-secrets"
+  description = "Parámetros de configuración simulada de OpenFGA"
+}
+
+resource "aws_secretsmanager_secret_version" "openfga_secret_value" {
+  secret_id     = aws_secretsmanager_secret.openfga_secret.id
+  secret_string = jsonencode({
+    API_URL     = var.openfga_api_url
+    STORE_ID    = var.openfga_store_id
+    MODELO_ID   = var.openfga_modelo_id
+  })
+}
+
+output "openfga_secret_arn" {
+  value = aws_secretsmanager_secret.openfga_secret.arn
+}
+
+# ============================================================
+#  BLOQUE MOCK API GATEWAY + LAMBDA PARA SIMULAR OPENFGA
+# ============================================================
+
+# Empaquetar la lambda mock
+data "archive_file" "mock_openfga_zip" {
+  type        = "zip"
+  source_file = "${path.module}/mock_openfga.py"
+  output_path = "${path.module}/mock_openfga.zip"
+}
+
+# Lambda mock OpenFGA
+resource "aws_lambda_function" "mock_openfga" {
+  function_name = "${var.project_prefix}-mock-openfga"
+  role          = aws_iam_role.lambda_role.arn
+  handler       = "mock_openfga.lambda_handler"
+  runtime       = "python3.12"
+  filename      = data.archive_file.mock_openfga_zip.output_path
+  timeout       = 10
+  memory_size   = 128
+}
+
+# API Gateway HTTP para simular OpenFGA
+resource "aws_apigatewayv2_api" "openfga_api" {
+  name          = "${var.project_prefix}-mock-openfga-api"
+  protocol_type = "HTTP"
+}
+
+# Integración Lambda -> API
+resource "aws_apigatewayv2_integration" "mock_integration" {
+  api_id           = aws_apigatewayv2_api.openfga_api.id
+  integration_type = "AWS_PROXY"
+  integration_uri  = aws_lambda_function.mock_openfga.invoke_arn
+}
+
+# Ruta simulada /stores/{store_id}/write
+resource "aws_apigatewayv2_route" "mock_route" {
+  api_id    = aws_apigatewayv2_api.openfga_api.id
+  route_key = "POST /stores/{store_id}/write"
+  target    = "integrations/${aws_apigatewayv2_integration.mock_integration.id}"
+}
+
+# Stage de despliegue
+resource "aws_apigatewayv2_stage" "mock_stage" {
+  api_id      = aws_apigatewayv2_api.openfga_api.id
+  name        = "$default"
+  auto_deploy = true
+}
+
+# Permiso para que API Gateway invoque la Lambda
+resource "aws_lambda_permission" "apigw_permission" {
+  statement_id  = "AllowAPIGatewayInvoke"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.mock_openfga.function_name
+  principal     = "apigateway.amazonaws.com"
+  source_arn    = "${aws_apigatewayv2_api.openfga_api.execution_arn}/*/*"
+}
+
+# Output para conectar utils.py
+output "mock_openfga_url" {
+  value = aws_apigatewayv2_api.openfga_api.api_endpoint
+}
+
+```
+mock_openfga.py
+```python
+import json
+import random
+
+def lambda_handler(event, context):
+    """Simula el endpoint OpenFGA /stores/{store_id}/write."""
+    try:
+        body = json.loads(event.get("body", "{}"))
+        store_id = event.get("pathParameters", {}).get("store_id", "unknown")
+
+        # Simulación de respuestas
+        if random.choice([True, False]):
+            response = {
+                "message": f"Tupla escrita con éxito en Store {store_id}",
+                "input": body
+            }
+            return {"statusCode": 200, "body": json.dumps(response)}
+        else:
+            response = {
+                "error": f"Error simulado al escribir en Store {store_id}"
+            }
+            return {"statusCode": 500, "body": json.dumps(response)}
+    except Exception as e:
+        return {"statusCode": 500, "body": json.dumps({"error": str(e)})}
+```
+
+tests/test_lambda_handler.py
+```python
+import pytest
+from unittest.mock import patch
+from src.lambda_funcion import lambda_handler
+
+EVENTO_VALIDO = {
+    "message": {
+        "hostname": "api.production.internal",
+        "timestamp": "2025-11-10T23:56:44Z",
+        "data": {
+            "event_type": "user_created",
+            "table": "users",
+            "values": {
+                "user_id": 1024,
+                "username": "ashketchum",
+                "email": "ash@kanto.com",
+                "created_at": "2025-11-10T23:56:00Z",
+                "is_active": True
+            }
+        }
+    }
+}
+
+
+# --- 1️⃣ Caso exitoso directo ---
+def test_lambda_exitoso(monkeypatch):
+    with patch("src.services.procesador.procesador", return_value={"statusCode": 200, "body": "OK"}) as mock_proc:
+        result = lambda_handler(EVENTO_VALIDO, None)
+        assert result["statusCode"] == 200
+        mock_proc.assert_called_once_with(EVENTO_VALIDO)
+
+
+# --- 2️⃣ Caso exitoso después del primer reintento ---
+def test_lambda_exito_despues_un_reintento(monkeypatch):
+    call_count = {"intentos": 0}
+
+    def fake_procesador(event):
+        call_count["intentos"] += 1
+        if call_count["intentos"] == 1:
+            return {"statusCode": 500, "body": "Error temporal"}
+        return {"statusCode": 200, "body": "Procesado"}
+
+    with patch("src.services.procesador.procesador", side_effect=fake_procesador) as mock_proc:
+        r1 = lambda_handler(EVENTO_VALIDO, None)
+        r2 = lambda_handler(EVENTO_VALIDO, None)
+        assert [r1["statusCode"], r2["statusCode"]] == [500, 200]
+        assert mock_proc.call_count == 2
+
+
+# --- 3️⃣ Caso exitoso después de dos reintentos ---
+def test_lambda_exito_despues_dos_reintentos(monkeypatch):
+    call_count = {"intentos": 0}
+
+    def fake_procesador(event):
+        call_count["intentos"] += 1
+        if call_count["intentos"] < 3:
+            return {"statusCode": 500, "body": f"Falla #{call_count['intentos']}"}
+        return {"statusCode": 200, "body": "Procesado"}
+
+    with patch("src.services.procesador.procesador", side_effect=fake_procesador) as mock_proc:
+        r1 = lambda_handler(EVENTO_VALIDO, None)
+        r2 = lambda_handler(EVENTO_VALIDO, None)
+        r3 = lambda_handler(EVENTO_VALIDO, None)
+        assert [r["statusCode"] for r in [r1, r2, r3]] == [500, 500, 200]
+        assert mock_proc.call_count == 3
+
+
+# --- 4️⃣ Caso falla total: mensaje enviado a DLQ ---
+def test_lambda_envio_a_dlq(monkeypatch):
+    with patch("src.services.procesador.procesador", return_value={"statusCode": 500, "body": "Error fatal"}) as mock_proc:
+        result = lambda_handler(EVENTO_VALIDO, None)
+        assert result["statusCode"] == 500
+        assert "Error" in result["body"]
+        mock_proc.assert_called_once_with(EVENTO_VALIDO)
+
+```
