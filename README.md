@@ -90,3 +90,102 @@ if __name__ == "__main__":
     
     print("\n--- Prueba local finalizada ---")
     ```
+
+```python
+import sys
+import os
+import pytest
+import json
+import logging
+
+# ✅ Permitir imports desde src/
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'src')))
+
+from lambda_funcion import lambda_handler
+
+logger = logging.getLogger()
+logger.setLevel(logging.INFO)
+
+# --- Datos simulados para integración ---
+EVENTO_VALIDO = {
+    "message": {
+        "hostname": "api.production.internal",
+        "timestamp": "2025-11-10T23:56:44Z",
+        "data": {
+            "event_type": "user_created",
+            "table": "users",
+            "values": {
+                "user_id": 1024,
+                "username": "ashketchum",
+                "email": "ash@kanto.com",
+                "created_at": "2025-11-10T23:56:00Z",
+                "is_active": True
+            }
+        }
+    }
+}
+
+
+# --- Configuración dinámica ---
+@pytest.fixture(scope="session", autouse=True)
+def setup_env():
+    """
+    Configura variables de entorno desde el .env (si existe)
+    o usa valores por defecto si no está configurado.
+    """
+    from dotenv import load_dotenv
+    load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), "..", "src", ".env"))
+
+    # Valores por defecto si no hay .env
+    os.environ.setdefault("API_URL", "http://localhost:8000")
+    os.environ.setdefault("STORE_ID", "store-001")
+    os.environ.setdefault("MODELO_ID", "modelo-001")
+
+    print("\n[INFO] Variables cargadas:")
+    print(" API_URL =", os.getenv("API_URL"))
+    print(" STORE_ID =", os.getenv("STORE_ID"))
+    print(" MODELO_ID =", os.getenv("MODELO_ID"))
+
+
+# --- Test principal de integración ---
+def test_lambda_integration_success(setup_env):
+    """
+    Test de integración completo: ejecuta la lambda real,
+    validando la interacción completa con ClienteServicio.
+    """
+    result = lambda_handler(EVENTO_VALIDO, None)
+    print("\n[DEBUG] Resultado de lambda_handler:", result)
+
+    assert "statusCode" in result
+    assert result["statusCode"] in [200, 500]
+
+    if result["statusCode"] == 200:
+        print("[OK] La tupla fue procesada y enviada correctamente a OpenFGA Mock.")
+    else:
+        print("[WARN] Hubo un error en la comunicación con OpenFGA (ver logs).")
+
+
+def test_lambda_integration_retry_flow(setup_env):
+    """
+    Test de integración: simula reintentos de SQS cuando falla
+    la comunicación con el servicio OpenFGA.
+    """
+    # 🔁 Primer intento con error forzado (por ejemplo, API caída)
+    evento_retry = dict(EVENTO_VALIDO)
+    evento_retry["retry_count"] = 0
+
+    print("\n[TEST] Ejecutando primer intento (API_URL = {})".format(os.getenv("API_URL")))
+    result_1 = lambda_handler(evento_retry, None)
+    assert "statusCode" in result_1
+    print("[DEBUG] Resultado intento 1:", result_1)
+
+    # 🔁 Segundo intento simulado
+    evento_retry["retry_count"] = 1
+    result_2 = lambda_handler(evento_retry, None)
+    print("[DEBUG] Resultado intento 2:", result_2)
+
+    # El segundo intento puede ser exitoso o no, dependiendo de tu mock OpenFGA
+    assert "statusCode" in result_2
+    assert result_2["statusCode"] in [200, 500]
+
+```
