@@ -189,3 +189,127 @@ def test_lambda_integration_retry_flow(setup_env):
     assert result_2["statusCode"] in [200, 500]
 
 ```
+
+```python
+import json
+import pytest
+from unittest.mock import MagicMock, patch
+
+from services.sqs import SQSService
+
+
+@pytest.fixture
+def sqs_mock(monkeypatch):
+    """Mock global de boto3.client('sqs')."""
+    mock_client = MagicMock()
+    monkeypatch.setattr("boto3.client", lambda service, region_name=None: mock_client)
+    return mock_client
+
+
+def test_enviar_a_retry_exitoso(sqs_mock, monkeypatch):
+    monkeypatch.setenv("RETRY_QUEUE_URL", "https://retry-queue")
+    service = SQSService()
+
+    sqs_mock.send_message.return_value = {"MessageId": "123"}
+
+    resp = service.enviar_a_retry({"foo": "bar"})
+
+    sqs_mock.send_message.assert_called_once_with(
+        QueueUrl="https://retry-queue",
+        MessageBody=json.dumps({"foo": "bar"})
+    )
+    assert resp["MessageId"] == "123"
+
+
+def test_enviar_a_retry_error(sqs_mock, monkeypatch):
+    monkeypatch.setenv("RETRY_QUEUE_URL", "https://retry-queue")
+    service = SQSService()
+
+    sqs_mock.send_message.side_effect = Exception("Boom")
+
+    with pytest.raises(Exception):
+        service.enviar_a_retry({"x": 1})
+
+
+def test_enviar_a_dlq_exitoso(sqs_mock, monkeypatch):
+    monkeypatch.setenv("DLQ_QUEUE_URL", "https://dlq-queue")
+    service = SQSService()
+
+    sqs_mock.send_message.return_value = {"MessageId": "999"}
+
+    resp = service.enviar_a_dlq({"abc": 123})
+
+    sqs_mock.send_message.assert_called_once_with(
+        QueueUrl="https://dlq-queue",
+        MessageBody=json.dumps({"abc": 123})
+    )
+    assert resp["MessageId"] == "999"
+
+
+def test_enviar_a_dlq_error(sqs_mock, monkeypatch):
+    monkeypatch.setenv("DLQ_QUEUE_URL", "https://dlq-queue")
+    service = SQSService()
+
+    sqs_mock.send_message.side_effect = Exception("DLQ Error")
+
+    with pytest.raises(Exception):
+        service.enviar_a_dlq({"fail": True})
+
+```
+```python
+import json
+import pytest
+from unittest.mock import patch, MagicMock
+
+from services.procesador import procesador
+
+
+@pytest.fixture
+def sqs_service_mock(monkeypatch):
+    """
+    Mockea el SQSService usado dentro del procesador.
+    """
+    mock = MagicMock()
+    monkeypatch.setattr("services.procesador.sqs", mock)
+    return mock
+
+
+def test_procesador_procesa_evento_sqs(sqs_service_mock):
+    """
+    Cubre la lectura del evento:
+    - Records[0]
+    - json.loads(body)
+    - logger.info
+    """
+
+    # Evento SQS simulado
+    fake_event = {
+        "Records": [
+            {
+                "body": json.dumps({
+                    "hostname": "api.test.internal",
+                    "event_type": "user_created",
+                    "table": "users",
+                    "values": {"id": 1}
+                })
+            }
+        ]
+    }
+
+    # Mock del método interno que procesa el evento
+    with patch("services.procesador.ClienteServicio") as cliente_mock:
+        cliente_instancia = MagicMock()
+        cliente_mock.return_value = cliente_instancia
+
+        # Llamada al método principal (esto ejecuta Records[0], json.loads, logs)
+        procesador(fake_event)
+
+        # Asegurar que ClienteServicio se llamó con el evento decodificado
+        cliente_instancia.enviar_evento.assert_called_once_with({
+            "hostname": "api.test.internal",
+            "event_type": "user_created",
+            "table": "users",
+            "values": {"id": 1}
+        })
+
+```
