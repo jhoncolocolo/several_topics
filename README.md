@@ -43,3 +43,40 @@ Si el paso 1 no es suficiente o si la política requiere menos permisos:
     ```bash
     setmqaut -m QMGR_TEST -t qmgr -p UsuarioMQ +connect +inq
     `
+
+```python
+import os
+import sys
+import types
+import importlib
+import pytest
+
+@pytest.fixture(autouse=True, scope="session")
+def fix_openfga_handler_import():
+    """
+    Evita que services.openfga_sync_retry_hander cree el cliente boto3
+    antes de que los tests puedan mockear nada.
+    """
+    module_name = "services.openfga_sync_retry_hander"
+
+    # 1. Forzar variables AWS dummy para boto3
+    os.environ.setdefault("AWS_REGION", "us-east-1")
+    os.environ.setdefault("AWS_DEFAULT_REGION", "us-east-1")
+
+    # 2. Si ya está importado, eliminarlo para que podamos re-mockear
+    if module_name in sys.modules:
+        del sys.modules[module_name]
+
+    # 3. Reemplazarlo temporalmente por stub
+    stub = types.ModuleType(module_name)
+    def enviar_registro_a_reintento_o_dlq(registro, es_dlq=False):
+        return None
+    stub.enviar_registro_a_reintento_o_dlq = enviar_registro_a_reintento_o_dlq
+
+    sys.modules[module_name] = stub
+
+    yield  # aquí se ejecutan los tests
+
+    # restaurar import real
+    sys.modules.pop(module_name, None)
+```
