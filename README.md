@@ -127,4 +127,116 @@ def ping():
     """Función trivial para probar importaciones sin activar boto3"""
     return "pong"
 
+
+
+import json
+import pytest
+from unittest.mock import patch, Mock
+
+import services.openfga_sync_retry_hander as handler
+
+
+# ============================================================
+# FIXTURE PARA VARIABLES DE ENTORNO
+# ============================================================
+
+@pytest.fixture(autouse=True)
+def setup_env(monkeypatch):
+    monkeypatch.setenv("RETRY_QUEUE_URL", "/retry")
+    monkeypatch.setenv("DLQ_QUEUE_URL", "/dlq")
+    monkeypatch.setenv("SQS_URL_ENDPOINT", "https://sqs.mock.aws")
+
+
+# ============================================================
+# HELPERS
+# ============================================================
+
+def mock_sqs_client():
+    """Crea un cliente SQS mockeado con send_message."""
+    m = Mock()
+    m.send_message = Mock()
+    return m
+
+
+# ============================================================
+# TEST 1: ENVÍO A COLA DE RETRY
+# ============================================================
+
+@patch("services.openfga_sync_retry_hander.get_sqs_client")
+def test_send_retry(mock_get_client):
+    mock_client = mock_sqs_client()
+    mock_get_client.return_value = mock_client
+
+    registro = {"id": 1, "op": "write"}
+
+    handler.enviar_registro_a_reintento_o_dlq(registro, es_dlq=False)
+
+    mock_client.send_message.assert_called_once()
+    args, kwargs = mock_client.send_message.call_args
+
+    assert kwargs["QueueUrl"] == "https://sqs.mock.aws/retry"
+
+    mensaje = json.loads(kwargs["MessageBody"])
+    assert mensaje == {"OperacionesOpenFga": [registro]}
+
+
+# ============================================================
+# TEST 2: ENVÍO A DLQ
+# ============================================================
+
+@patch("services.openfga_sync_retry_hander.get_sqs_client")
+def test_send_dlq(mock_get_client):
+    mock_client = mock_sqs_client()
+    mock_get_client.return_value = mock_client
+
+    registro = {"id": 2, "op": "delete"}
+
+    handler.enviar_registro_a_reintento_o_dlq(registro, es_dlq=True)
+
+    mock_client.send_message.assert_called_once()
+    args, kwargs = mock_client.send_message.call_args
+
+    assert kwargs["QueueUrl"] == "https://sqs.mock.aws/dlq"
+
+    mensaje = json.loads(kwargs["MessageBody"])
+    assert mensaje == {"OperacionesOpenFga": [registro]}
+
+
+# ============================================================
+# TEST 3: SERIALIZACIÓN JSON
+# ============================================================
+
+@patch("services.openfga_sync_retry_hander.get_sqs_client")
+def test_serializacion_correcta(mock_get_client):
+    mock_client = mock_sqs_client()
+    mock_get_client.return_value = mock_client
+
+    registro = {"id": 99, "contenido": {"a": 1, "b": 2}}
+
+    handler.enviar_registro_a_reintento_o_dlq(registro)
+
+    llamado = mock_client.send_message.call_args[1]["MessageBody"]
+    parsed = json.loads(llamado)
+
+    assert parsed["OperacionesOpenFga"][0]["contenido"]["a"] == 1
+    assert parsed["OperacionesOpenFga"][0]["contenido"]["b"] == 2
+
+
+# ============================================================
+# TEST 4: ERROR EN EL ENVÍO
+# ============================================================
+
+@patch("services.openfga_sync_retry_hander.get_sqs_client")
+def test_error_en_envio(mock_get_client, caplog):
+    mock_client = mock_sqs_client()
+    mock_client.send_message.side_effect = Exception("SQS DOWN")
+    mock_get_client.return_value = mock_client
+
+    registro = {"id": 123}
+
+    handler.enviar_registro_a_reintento_o_dlq(registro)
+
+    assert "Error enviado mensaje a sqs" in caplog.text
+    assert "SQS DOWN" in caplog.text
+
 ```
