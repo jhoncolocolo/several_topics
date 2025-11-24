@@ -46,145 +46,145 @@ Si el paso 1 no es suficiente o si la política requiere menos permisos:
 
 ```python
 import pytest
-from unittest.mock import Mock
-import json
+from models.escribir_o_borrar_tupla_peticion import (
+    TuplaLlave,
+    EscribirTuplaPeticion
+)
+from utilitarios.constantes import OpenFGARelacion, OpenFGATipo
 
-from services.cliente_servicio import clienteServicio
-from services.excepciones import OpenFGAError
-from models.escribir_o_borrar_tupla_peticion import EscribirTuplaPeticion
 
+# ============================================================
+# FIXTURA BÁSICA (petición completa real)
+# ============================================================
 
-@pytest.fixture(autouse=True)
-def patch_openfga_config(monkeypatch):
-    monkeypatch.setattr(
-        "services.cliente_servicio.obtener_configuracion_openfga",
-        lambda: {
-            "API_URL": "https://fake-fga",
-            "STORE_ID": "store123"
-        }
+@pytest.fixture
+def sample_tuple_key():
+    return TuplaLlave(
+        user={OpenFGATipo.USER.value: "userA"},
+        relation=OpenFGARelacion.USER_ADMIN_CI,
+        object={OpenFGATipo.PROFILE.value: "obj1"}
     )
 
 
 @pytest.fixture
-def fake_request():
-    req = Mock(spec=EscribirTuplaPeticion)
-
-    # Submock para tuple_key
-    req.tuple_key = Mock()
-    req.tuple_key.user = "userA"
-    req.tuple_key.relation = "relX"
-    req.tuple_key.object = "obj1"
-
-    req.guardar_to_dict.return_value = {"tuple": "save-tuple"}
-    req.borrar_to_dict.return_value = {"tuple": "delete-tuple"}
-
-    return req
+def sample_request(sample_tuple_key):
+    return EscribirTuplaPeticion(
+        tuple_key=sample_tuple_key,
+        modelo_autorizacion_id="TEST_MODEL"
+    )
 
 
-def test_write_tuple_ok(monkeypatch, fake_request):
-    fake_http = Mock()
-    fake_http.request.return_value = Mock(status=200)
+# ============================================================
+# TEST 1: instanciación de TuplaLlave
+# ============================================================
 
-    monkeypatch.setattr("services.cliente_servicio.urllib3.PoolManager", lambda timeout: fake_http)
+def test_tuple_llave_instantiation():
+    key = TuplaLlave(
+        user={OpenFGATipo.USER.value: "john"},
+        relation=OpenFGARelacion.USER_OWNER_PROFILE,
+        object={OpenFGATipo.PROFILE.value: "ABC123"}
+    )
 
-    c = clienteServicio()
-    assert c.write_tuple(fake_request) is True
-
-
-def test_write_tuple_bad_status(monkeypatch, fake_request):
-    fake_http = Mock()
-    fake_http.request.return_value = Mock(status=500)
-
-    monkeypatch.setattr("services.cliente_servicio.urllib3.PoolManager", lambda timeout: fake_http)
-
-    c = clienteServicio()
-    assert c.write_tuple(fake_request) is False
+    assert key.user == {"user": "john"}
+    assert key.relation == OpenFGARelacion.USER_OWNER_PROFILE
+    assert key.object == {"profile": "ABC123"}
 
 
-def test_write_tuple_exception(monkeypatch, fake_request):
-    fake_http = Mock()
-    fake_http.request.side_effect = Exception("NETWORK FAIL")
+# ============================================================
+# TEST 2: instanciación de EscribirTuplaPeticion
+# ============================================================
 
-    monkeypatch.setattr("services.cliente_servicio.urllib3.PoolManager", lambda timeout: fake_http)
-
-    c = clienteServicio()
-    with pytest.raises(OpenFGAError):
-        c.write_tuple(fake_request)
+def test_escribir_tupla_peticion_instantiation(sample_request, sample_tuple_key):
+    assert sample_request.modelo_autorizacion_id == "TEST_MODEL"
+    assert sample_request.tuple_key == sample_tuple_key
 
 
-def test_remove_tuple_ok(monkeypatch, fake_request):
-    fake_http = Mock()
-    fake_http.request.return_value = Mock(status=200)
+# ============================================================
+# TEST 3: guardar_to_dict() devuelve estructura correcta
+# ============================================================
 
-    monkeypatch.setattr("services.cliente_servicio.urllib3.PoolManager", lambda timeout: fake_http)
+def test_guardar_to_dict_structure(sample_request):
+    result = sample_request.guardar_to_dict()
 
-    c = clienteServicio()
-    assert c.remove_tuple(fake_request) is True
+    assert "writes" in result
+    assert "tuple_keys" in result["writes"]
+    assert "modelo_autorizacion_id" in result
 
+    tk = result["writes"]["tuple_keys"][0]
 
-def test_remove_tuple_bad_status(monkeypatch, fake_request):
-    fake_http = Mock()
-    fake_http.request.return_value = Mock(status=400)
+    assert tk["user"] == sample_request.tuple_key.user
+    assert tk["relation"] == sample_request.tuple_key.relation
+    assert tk["object"] == sample_request.tuple_key.object
 
-    monkeypatch.setattr("services.cliente_servicio.urllib3.PoolManager", lambda timeout: fake_http)
-
-    c = clienteServicio()
-    assert c.remove_tuple(fake_request) is False
-
-
-def test_remove_tuple_exception(monkeypatch, fake_request):
-    fake_http = Mock()
-    fake_http.request.side_effect = Exception("DELETE ERROR")
-
-    monkeypatch.setattr("services.cliente_servicio.urllib3.PoolManager", lambda timeout: fake_http)
-
-    c = clienteServicio()
-    with pytest.raises(OpenFGAError):
-        c.remove_tuple(fake_request)
+    assert result["modelo_autorizacion_id"] == "TEST_MODEL"
 
 
-def test_comprobar_tupla_allowed_true(monkeypatch, fake_request):
-    fake_resp = Mock()
-    fake_resp.status = 200
-    fake_resp.json.return_value = {"allowed": True}
+# ============================================================
+# TEST 4: borrar_to_dict() devuelve misma estructura que guardar_to_dict()
+# ============================================================
 
-    fake_http = Mock(request=Mock(return_value=fake_resp))
-    monkeypatch.setattr("services.cliente_servicio.urllib3.PoolManager", lambda timeout: fake_http)
+def test_borrar_to_dict_structure(sample_request):
+    result = sample_request.borrar_to_dict()
 
-    c = clienteServicio()
-    assert c.comprobar_tupla(fake_request) is True
+    assert "writes" in result
+    assert "tuple_keys" in result["writes"]
 
-def test_comprobar_tupla_allowed_false(monkeypatch, fake_request):
-    fake_resp = Mock()
-    fake_resp.status = 200
-    fake_resp.json.return_value = {"allowed": False}
+    tk = result["writes"]["tuple_keys"][0]
 
-    fake_http = Mock(request=Mock(return_value=fake_resp))
-    monkeypatch.setattr("services.cliente_servicio.urllib3.PoolManager", lambda timeout: fake_http)
-
-    c = clienteServicio()
-    assert c.comprobar_tupla(fake_request) is False
+    assert tk["user"] == sample_request.tuple_key.user
+    assert tk["relation"] == sample_request.tuple_key.relation
+    assert tk["object"] == sample_request.tuple_key.object
 
 
-def test_comprobar_tupla_bad_status(monkeypatch, fake_request):
-    fake_resp = Mock(status=500)
-    fake_http = Mock(request=Mock(return_value=fake_resp))
+# ============================================================
+# TEST 5: parametrizar diferentes entradas
+# ============================================================
 
-    monkeypatch.setattr("services.cliente_servicio.urllib3.PoolManager", lambda timeout: fake_http)
+@pytest.mark.parametrize(
+    "user, obj",
+    [
+        ("user1", "CI001"),
+        ("userXYZ", "CI999"),
+        ("abc", "12345"),
+    ]
+)
+def test_parametrized_requests(user, obj):
+    key = TuplaLlave(
+        user={OpenFGATipo.USER.value: user},
+        relation=OpenFGARelacion.USER_ADMIN_CI,
+        object={OpenFGATipo.PROFILE.value: obj},
+    )
 
-    c = clienteServicio()
-    with pytest.raises(OpenFGAError):
-        c.comprobar_tupla(fake_request)
+    req = EscribirTuplaPeticion(key, modelo_autorizacion_id="MODEL123")
+
+    result = req.guardar_to_dict()
+
+    tk = result["writes"]["tuple_keys"][0]
+
+    assert tk["user"] == {"user": user}
+    assert tk["object"] == {"profile": obj}
+    assert result["modelo_autorizacion_id"] == "MODEL123"
 
 
-def test_comprobar_tupla_exception(monkeypatch, fake_request):
-    fake_http = Mock()
-    fake_http.request.side_effect = Exception("CHECK ERROR")
+# ============================================================
+# TEST 6: asegurarse que no se retornan referencias mutables
+# ============================================================
 
-    monkeypatch.setattr("services.cliente_servicio.urllib3.PoolManager", lambda timeout: fake_http)
+def test_guardar_to_dict_independencia(sample_request):
+    r1 = sample_request.guardar_to_dict()
+    r2 = sample_request.guardar_to_dict()
 
-    c = clienteServicio()
-    with pytest.raises(OpenFGAError):
-        c.comprobar_tupla(fake_request)
+    # modificar r1 NO debe afectar r2
+    r1["writes"]["tuple_keys"][0]["user"]["user"] = "MOD"
 
+    assert r2["writes"]["tuple_keys"][0]["user"]["user"] != "MOD"
+
+
+# ============================================================
+# TEST 7: relación es un Enum válido
+# ============================================================
+
+def test_relation_is_enum(sample_request):
+    assert isinstance(sample_request.tuple_key.relation, OpenFGARelacion)
+    assert sample_request.tuple_key.relation.value == "administrator"
 ```
