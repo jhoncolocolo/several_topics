@@ -45,6 +45,7 @@ Si el paso 1 no es suficiente o si la política requiere menos permisos:
     `
 
 ```python
+## test_escribir_o_borrar_tupla_peticion.py
 import pytest
 from models.escribir_o_borrar_tupla_peticion import (
     TuplaLlave,
@@ -187,4 +188,205 @@ def test_guardar_to_dict_independencia(sample_request):
 def test_relation_is_enum(sample_request):
     assert isinstance(sample_request.tuple_key.relation, OpenFGARelacion)
     assert sample_request.tuple_key.relation.value == "administrator"
+
+
+## test_cliente_servicio.py
+import pytest
+from unittest.mock import Mock
+import json
+
+from services.cliente_servicio import clienteServicio
+from services.excepciones import OpenFGAError
+from models.escribir_o_borrar_tupla_peticion import (
+    EscribirTuplaPeticion,
+    TuplaLlave,
+)
+from utilitarios.constantes import OpenFGARelacion, OpenFGATipo
+
+
+# ============================================================
+# FIXTURE: parchear configuracion OpenFGA
+# ============================================================
+
+@pytest.fixture(autouse=True)
+def patch_openfga_config(monkeypatch):
+    monkeypatch.setattr(
+        "services.cliente_servicio.obtener_configuracion_openfga",
+        lambda: {
+            "API_URL": "https://fake-fga",
+            "STORE_ID": "store123",
+            "MODEL_ID": "MODEL_X"
+        }
+    )
+
+
+# ============================================================
+# FIXTURE: request REALISTA DE EscribirTuplaPeticion
+# ============================================================
+
+@pytest.fixture
+def fake_request():
+    tuple_key = TuplaLlave(
+        user={OpenFGATipo.USER.value: "userA"},
+        relation=OpenFGARelacion.USER_ADMIN_CI,
+        object={OpenFGATipo.PROFILE.value: "obj1"},
+    )
+
+    req = EscribirTuplaPeticion(
+        tuple_key=tuple_key,
+        modelo_autorizacion_id="MODEL_X"
+    )
+
+    return req
+
+
+# ============================================================
+# WRITE TUPLE
+# ============================================================
+
+def test_write_tuple_ok(monkeypatch, fake_request):
+    fake_http = Mock()
+    fake_http.request.return_value = Mock(status=200)
+
+    monkeypatch.setattr(
+        "services.cliente_servicio.urllib3.PoolManager",
+        lambda timeout: fake_http
+    )
+
+    c = clienteServicio()
+    assert c.write_tuple(fake_request) is True
+
+
+def test_write_tuple_bad_status(monkeypatch, fake_request):
+    fake_http = Mock()
+    fake_http.request.return_value = Mock(status=500)
+
+    monkeypatch.setattr(
+        "services.cliente_servicio.urllib3.PoolManager",
+        lambda timeout: fake_http
+    )
+
+    c = clienteServicio()
+    assert c.write_tuple(fake_request) is False
+
+
+def test_write_tuple_exception(monkeypatch, fake_request):
+    fake_http = Mock()
+    fake_http.request.side_effect = Exception("NETWORK FAIL")
+
+    monkeypatch.setattr(
+        "services.cliente_servicio.urllib3.PoolManager",
+        lambda timeout: fake_http
+    )
+
+    c = clienteServicio()
+    with pytest.raises(OpenFGAError):
+        c.write_tuple(fake_request)
+
+
+# ============================================================
+# REMOVE TUPLE
+# ============================================================
+
+def test_remove_tuple_ok(monkeypatch, fake_request):
+    fake_http = Mock()
+    fake_http.request.return_value = Mock(status=200)
+
+    monkeypatch.setattr(
+        "services.cliente_servicio.urllib3.PoolManager",
+        lambda timeout: fake_http
+    )
+
+    c = clienteServicio()
+    assert c.remove_tuple(fake_request) is True
+
+
+def test_remove_tuple_bad_status(monkeypatch, fake_request):
+    fake_http = Mock()
+    fake_http.request.return_value = Mock(status=400)
+
+    monkeypatch.setattr(
+        "services.cliente_servicio.urllib3.PoolManager",
+        lambda timeout: fake_http
+    )
+
+    c = clienteServicio()
+    assert c.remove_tuple(fake_request) is False
+
+
+def test_remove_tuple_exception(monkeypatch, fake_request):
+    fake_http = Mock()
+    fake_http.request.side_effect = Exception("DELETE ERROR")
+
+    monkeypatch.setattr(
+        "services.cliente_servicio.urllib3.PoolManager",
+        lambda timeout: fake_http
+    )
+
+    c = clienteServicio()
+    with pytest.raises(OpenFGAError):
+        c.remove_tuple(fake_request)
+
+
+# ============================================================
+# CHECK TUPLE
+# ============================================================
+
+def test_comprobar_tupla_allowed_true(monkeypatch, fake_request):
+    fake_resp = Mock()
+    fake_resp.status = 200
+    fake_resp.json.return_value = {"allowed": True}
+
+    fake_http = Mock(request=Mock(return_value=fake_resp))
+    monkeypatch.setattr(
+        "services.cliente_servicio.urllib3.PoolManager",
+        lambda timeout: fake_http
+    )
+
+    c = clienteServicio()
+    assert c.comprobar_tupla(fake_request) is True
+
+
+def test_comprobar_tupla_allowed_false(monkeypatch, fake_request):
+    fake_resp = Mock()
+    fake_resp.status = 200
+    fake_resp.json.return_value = {"allowed": False}
+
+    fake_http = Mock(request=Mock(return_value=fake_resp))
+    monkeypatch.setattr(
+        "services.cliente_servicio.urllib3.PoolManager",
+        lambda timeout: fake_http
+    )
+
+    c = clienteServicio()
+    assert c.comprobar_tupla(fake_request) is False
+
+
+def test_comprobar_tupla_bad_status(monkeypatch, fake_request):
+    fake_resp = Mock(status=500)
+    fake_http = Mock(request=Mock(return_value=fake_resp))
+
+    monkeypatch.setattr(
+        "services.cliente_servicio.urllib3.PoolManager",
+        lambda timeout: fake_http
+    )
+
+    c = clienteServicio()
+    with pytest.raises(OpenFGAError):
+        c.comprobar_tupla(fake_request)
+
+
+def test_comprobar_tupla_exception(monkeypatch, fake_request):
+    fake_http = Mock()
+    fake_http.request.side_effect = Exception("CHECK ERROR")
+
+    monkeypatch.setattr(
+        "services.cliente_servicio.urllib3.PoolManager",
+        lambda timeout: fake_http
+    )
+
+    c = clienteServicio()
+    with pytest.raises(OpenFGAError):
+        c.comprobar_tupla(fake_request)
+
 ```
