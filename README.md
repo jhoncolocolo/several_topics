@@ -45,198 +45,251 @@ Si el paso 1 no es suficiente o si la política requiere menos permisos:
     `
 
 ```python
-import os
+##tests/test_procesador_tabla1.py
+##  src\procesadores\procesador_tabla1.py
+from models.escribir_o_borrar_tupla_peticion import TuplaLlave, EscribirTuplaPeticion
+from utilitarios.constantes import OpenFGARelacion, OpenFGATipo, ErroresLiterales,CuentasValorConstante
+from services.cliente_servicio import clienteServicio
+from services.excepciones import BadRequestError
 import json
+
 import logging
-import boto3
-from botocore.config import Config
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
-# ============================================================================
-# CONFIGURACIÓN BOTO3 – AHORA LAZY
-# ============================================================================
+class TABLA1:
+    _cliente_servicio = None
 
-_boto_config = Config(
-    connect_timeout=1,
-    read_timeout=2,
-    retries={
-        "max_attempts": 2,
-        "mode": "standard"
+    def __init__(self):
+        TABLA1._cliente_servicio = clienteServicio()
+
+    def delete(self, event: dict):
+        user = event.get('antigua_data_usr', {}).get('string').strip()
+        ci = event.get('antigua_data_num', {}).get('string').strip()
+
+        if not user or not ci:
+            raise BadRequestError(self.__obtener_tuple_logging_info(user,ci,'delete'))
+
+        request = self._obtener_fga_peticion(user, ci)
+        return TABLA1._cliente_servicio.delete_tuple(request=request)
+
+    def create(self, event: dict):
+        user = event.get('data_usr', {}).get('string').strip()
+        ci = event.get('data_num', {}).get('string').strip()
+
+        if not user or not ci:
+           raise BadRequestError(self.__obtener_tuple_logging_info(user,ci,'create'))
+
+        request = self._obtener_fga_peticion(user, ci)
+        return TABLA1._cliente_servicio.write_tuple(request=request)
+
+    def check(self, event: dict):
+        user = event.get('antigua_data_usr', {}).get('string').strip()
+        ci = event.get('antigua_data_num', {}).get('string').strip()
+
+        if not user or not ci:
+            raise BadRequestError(self.__obtener_tuple_logging_info(user,ci,'verificar'))
+
+        request = self._obtener_fga_peticion(user, ci)
+        exists = TABLA1._cliente_servicio.check_tuple(request=request)
+        return exists
+
+    def update(self, event: dict):
+        user_type = event.get('data_tipo', {}).get('string').strip()
+        doesTupleExists = self.check(event)
+        if user_type == CuentasValorConstante.ES_TIPO_GESTOR and doesTupleExists:
+            isTupleDeleted = self.delete(event)
+            return isTupleDeleted
+        elif user_type == CuentasValorConstante.ES_TIPO_SUPER_POWER and not doesTupleExists:
+            isTupleCreated = self.create(event)
+            return isTupleCreated
+        else:
+            raise BadRequestError(f"{ErroresLiterales.NO_ACTUALIZADO.value}{json.dumps(event)}-existeTupla{doesTupleExists}")
+
+
+    def _obtener_fga_peticion(self, user: str, ci: str):
+        _user = {OpenFGATipo.USER.value: user}
+        _object = {OpenFGATipo.PROFILE.value: ci}
+        TUPLA_LLAVE = TuplaLlave(user=_user, relation=OpenFGARelacion.USER_ADMIN_CI, object=_object)
+        request = EscribirTuplaPeticion(tuple_key= TUPLA_LLAVE, modelo_autorizacion_id= self._cliente_servicio._fga_config['MODEL_ID'])
+        return request
+    
+    def __obtener_tuple_logging_info(self,usuario:str,ci:str,type:str):
+        return f"{ErroresLiterales.INFORMACION_FALTANTE_TABLA1.value}usuario:{usuario},ci:{ci},tipo:{type}"
+
+## tests/test_funcion_evento.py
+import pytest
+from unittest.mock import Mock, patch
+from utilitarios.constantes import FuenteEvento, TipoEvento
+
+import utilitarios.funcion_evento as fe
+
+
+# ==============================================
+# TEST obtener_evento_identificador()
+# ==============================================
+
+def test_obtener_evento_identificador_usando_fuente_normal():
+    event = {
+        "fuente": {"string": "TABLA1"},
+        "EVENTO_TIPO": {"string": "AC"}
     }
-)
 
-_sqs_client = None  # ← ya NO se crea boto3 a nivel global
+    res = fe.obtener_evento_identificador(event)
+
+    assert res == {"fuente": "TABLA1", "tipo_evento": "AC"}
 
 
-def get_sqs_client():
+def test_obtener_evento_identificador_usando_antigua_fuente():
+    event = {
+        "antigua_fuente": {"string": "TABLA1"},
+        "EVENTO_TIPO": {"string": "EL"}
+    }
+
+    res = fe.obtener_evento_identificador(event)
+
+    assert res == {"fuente": "TABLA1", "tipo_evento": "EL"}
+
+
+def test_obtener_evento_identificador_nulos():
+    event = {}
+
+    res = fe.obtener_evento_identificador(event)
+
+    assert res == {"fuente": None, "tipo_evento": None}
+
+
+# ==============================================
+# TEST procesar_evento()
+# ==============================================
+
+@pytest.fixture
+def mock_tabla1(monkeypatch):
     """
-    Carga lazy: solo crea el cliente la PRIMERA VEZ que se necesite.
-    Esto permite que Pytest lo parchee ANTES y que Moto lo intercepte.
+    Mockea TABLA1 completo y lo inyecta en la función.
     """
-    global _sqs_client
-    if _sqs_client is None:
-        logger.debug("Inicializando cliente SQS (lazy load)")
-        _sqs_client = boto3.client("sqs", config=_boto_config)
-    return _sqs_client
+    mock = Mock()
+    monkeypatch.setattr(fe, "TABLA1", lambda: mock)
+    return mock
 
 
-# ============================================================================
-# FUNCION PRINCIPAL: enviar_registro_a_reintento_o_dlq
-# ============================================================================
+def test_procesar_evento_delete(mock_tabla1):
+    evento = {}
+    mock_tabla1.delete.return_value = "DELETED"
 
-def enviar_registro_a_reintento_o_dlq(registro, es_dlq=False):
+    result = fe.procesar_evento(evento, FuenteEvento.TABLA1, TipoEvento.ELIMINAR)
+
+    assert result == "DELETED"
+    mock_tabla1.delete.assert_called_once_with(evento)
+
+
+def test_procesar_evento_create(mock_tabla1):
+    evento = {}
+    mock_tabla1.create.return_value = "CREATED"
+
+    result = fe.procesar_evento(evento, FuenteEvento.TABLA1, TipoEvento.CREAR)
+
+    assert result == "CREATED"
+    mock_tabla1.create.assert_called_once_with(evento)
+
+
+def test_procesar_evento_update(mock_tabla1):
+    evento = {}
+    mock_tabla1.update.return_value = "UPDATED"
+
+    result = fe.procesar_evento(evento, FuenteEvento.TABLA1, TipoEvento.ACTUALIZAR)
+
+    assert result == "UPDATED"
+    mock_tabla1.update.assert_called_once_with(evento)
+
+
+def test_procesar_evento_fuente_no_soportada(mock_tabla1):
     """
-    Envía un registro a la cola de retry o DLQ.
-    Maneja errores internos y loguea sin romper el flujo.
+    Si pusieras más procesadores en el futuro,
+    este test se anticipa a asegurar que TABLA1 solo se usa para la fuente correcta.
     """
+    evento = {}
 
-    try:
-        # Obtener endpoint base y colas desde ENV
-        endpoint = os.getenv("SQS_URL_ENDPOINT", "")
-        retry_suffix = os.getenv("RETRY_QUEUE_URL", "/retry")
-        dlq_suffix = os.getenv("DLQ_QUEUE_URL", "/dlq")
+    # No debería llamar nada
+    fe.procesar_evento(evento, FuenteEvento.TABLA2, TipoEvento.CREAR)
 
-        cola_suffix = dlq_suffix if es_dlq else retry_suffix
-        queue_url = f"{endpoint}{cola_suffix}"
+    mock_tabla1.create.assert_not_called()
+    mock_tabla1.update.assert_not_called()
+    mock_tabla1.delete.assert_not_called()
 
-        body = {
-            "OperacionesOpenFga": [registro]
-        }
-
-        get_sqs_client().send_message(
-            QueueUrl=queue_url,
-            MessageBody=json.dumps(body)
-        )
-
-        logger.info(
-            f"Registro enviado a {'DLQ' if es_dlq else 'RETRY'}: {cola_suffix} → {json.dumps(body)}"
-        )
-
-    except Exception as e:
-        logger.error("Error enviado mensaje a sqs")
-        logger.error(str(e))
-
-
-# ============================================================================
-# UTIL OPCIONAL PARA DEBUG
-# ============================================================================
-
-def ping():
-    """Función trivial para probar importaciones sin activar boto3"""
-    return "pong"
-
-
-
-import json
+##tests/test_conexion_redis.py
 import pytest
 from unittest.mock import patch, Mock
 
-import services.openfga_sync_retry_hander as handler
+import utilitarios.conexion_redis as cr
 
 
-# ============================================================
-# FIXTURE PARA VARIABLES DE ENTORNO
-# ============================================================
+# ==============================================
+# FIXTURE PARA RESETEAR CACHE GLOBAL
+# ==============================================
 
 @pytest.fixture(autouse=True)
-def setup_env(monkeypatch):
-    monkeypatch.setenv("RETRY_QUEUE_URL", "/retry")
-    monkeypatch.setenv("DLQ_QUEUE_URL", "/dlq")
-    monkeypatch.setenv("SQS_URL_ENDPOINT", "https://sqs.mock.aws")
+def reset_global():
+    cr.redis_cliente = None
+    yield
+    cr.redis_cliente = None
 
 
-# ============================================================
-# HELPERS
-# ============================================================
+# ==============================================
+# TEST obtener_conexion()
+# ==============================================
 
-def mock_sqs_client():
-    """Crea un cliente SQS mockeado con send_message."""
-    m = Mock()
-    m.send_message = Mock()
-    return m
+def test_obtener_conexion_crea_nueva_instancia(monkeypatch):
+    fake_pool = Mock()
+    fake_redis = Mock()
 
+    monkeypatch.setattr(cr, "ConnectionPool", lambda **kwargs: fake_pool)
+    monkeypatch.setattr(cr, "Redis", lambda connection_pool: fake_redis)
 
-# ============================================================
-# TEST 1: ENVÍO A COLA DE RETRY
-# ============================================================
+    config = Mock()
+    config._redis_config = {"REDIS_HOST": "localhost", "REDIS_PORT": 6379}
 
-@patch("services.openfga_sync_retry_hander.get_sqs_client")
-def test_send_retry(mock_get_client):
-    mock_client = mock_sqs_client()
-    mock_get_client.return_value = mock_client
+    conn = cr.obtener_conexion(config)
 
-    registro = {"id": 1, "op": "write"}
-
-    handler.enviar_registro_a_reintento_o_dlq(registro, es_dlq=False)
-
-    mock_client.send_message.assert_called_once()
-    args, kwargs = mock_client.send_message.call_args
-
-    assert kwargs["QueueUrl"] == "https://sqs.mock.aws/retry"
-
-    mensaje = json.loads(kwargs["MessageBody"])
-    assert mensaje == {"OperacionesOpenFga": [registro]}
+    assert conn == fake_redis
+    assert cr.redis_cliente == fake_redis
 
 
-# ============================================================
-# TEST 2: ENVÍO A DLQ
-# ============================================================
+def test_obtener_conexion_reutiliza_instancia(monkeypatch):
+    fake_pool = Mock()
+    fake_redis = Mock()
 
-@patch("services.openfga_sync_retry_hander.get_sqs_client")
-def test_send_dlq(mock_get_client):
-    mock_client = mock_sqs_client()
-    mock_get_client.return_value = mock_client
+    monkeypatch.setattr(cr, "ConnectionPool", lambda **kwargs: fake_pool)
+    monkeypatch.setattr(cr, "Redis", lambda connection_pool: fake_redis)
 
-    registro = {"id": 2, "op": "delete"}
+    config = Mock()
+    config._redis_config = {"REDIS_HOST": "localhost", "REDIS_PORT": 6379}
 
-    handler.enviar_registro_a_reintento_o_dlq(registro, es_dlq=True)
+    first = cr.obtener_conexion(config)
+    second = cr.obtener_conexion(config)
 
-    mock_client.send_message.assert_called_once()
-    args, kwargs = mock_client.send_message.call_args
-
-    assert kwargs["QueueUrl"] == "https://sqs.mock.aws/dlq"
-
-    mensaje = json.loads(kwargs["MessageBody"])
-    assert mensaje == {"OperacionesOpenFga": [registro]}
+    assert first is second  # reutilización
+    assert cr.redis_cliente is first
 
 
-# ============================================================
-# TEST 3: SERIALIZACIÓN JSON
-# ============================================================
+def test_connection_parameters(monkeypatch):
+    captured_kwargs = {}
 
-@patch("services.openfga_sync_retry_hander.get_sqs_client")
-def test_serializacion_correcta(mock_get_client):
-    mock_client = mock_sqs_client()
-    mock_get_client.return_value = mock_client
+    def fake_pool(**kwargs):
+        captured_kwargs.update(kwargs)
+        return Mock()
 
-    registro = {"id": 99, "contenido": {"a": 1, "b": 2}}
+    monkeypatch.setattr(cr, "ConnectionPool", fake_pool)
+    monkeypatch.setattr(cr, "Redis", lambda connection_pool: Mock())
 
-    handler.enviar_registro_a_reintento_o_dlq(registro)
+    config = Mock()
+    config._redis_config = {"REDIS_HOST": "redis.domain", "REDIS_PORT": 9999}
 
-    llamado = mock_client.send_message.call_args[1]["MessageBody"]
-    parsed = json.loads(llamado)
+    cr.obtener_conexion(config)
 
-    assert parsed["OperacionesOpenFga"][0]["contenido"]["a"] == 1
-    assert parsed["OperacionesOpenFga"][0]["contenido"]["b"] == 2
-
-
-# ============================================================
-# TEST 4: ERROR EN EL ENVÍO
-# ============================================================
-
-@patch("services.openfga_sync_retry_hander.get_sqs_client")
-def test_error_en_envio(mock_get_client, caplog):
-    mock_client = mock_sqs_client()
-    mock_client.send_message.side_effect = Exception("SQS DOWN")
-    mock_get_client.return_value = mock_client
-
-    registro = {"id": 123}
-
-    handler.enviar_registro_a_reintento_o_dlq(registro)
-
-    assert "Error enviado mensaje a sqs" in caplog.text
-    assert "SQS DOWN" in caplog.text
+    assert captured_kwargs["host"] == "redis.domain"
+    assert captured_kwargs["port"] == 9999
+    assert captured_kwargs["decode_responses"] is True
 
 ```
