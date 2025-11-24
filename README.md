@@ -46,37 +46,85 @@ Si el paso 1 no es suficiente o si la política requiere menos permisos:
 
 ```python
 import os
-import sys
-import types
-import importlib
-import pytest
+import json
+import logging
+import boto3
+from botocore.config import Config
 
-@pytest.fixture(autouse=True, scope="session")
-def fix_openfga_handler_import():
+logger = logging.getLogger()
+logger.setLevel(logging.INFO)
+
+# ============================================================================
+# CONFIGURACIÓN BOTO3 – AHORA LAZY
+# ============================================================================
+
+_boto_config = Config(
+    connect_timeout=1,
+    read_timeout=2,
+    retries={
+        "max_attempts": 2,
+        "mode": "standard"
+    }
+)
+
+_sqs_client = None  # ← ya NO se crea boto3 a nivel global
+
+
+def get_sqs_client():
     """
-    Evita que services.openfga_sync_retry_hander cree el cliente boto3
-    antes de que los tests puedan mockear nada.
+    Carga lazy: solo crea el cliente la PRIMERA VEZ que se necesite.
+    Esto permite que Pytest lo parchee ANTES y que Moto lo intercepte.
     """
-    module_name = "services.openfga_sync_retry_hander"
+    global _sqs_client
+    if _sqs_client is None:
+        logger.debug("Inicializando cliente SQS (lazy load)")
+        _sqs_client = boto3.client("sqs", config=_boto_config)
+    return _sqs_client
 
-    # 1. Forzar variables AWS dummy para boto3
-    os.environ.setdefault("AWS_REGION", "us-east-1")
-    os.environ.setdefault("AWS_DEFAULT_REGION", "us-east-1")
 
-    # 2. Si ya está importado, eliminarlo para que podamos re-mockear
-    if module_name in sys.modules:
-        del sys.modules[module_name]
+# ============================================================================
+# FUNCION PRINCIPAL: enviar_registro_a_reintento_o_dlq
+# ============================================================================
 
-    # 3. Reemplazarlo temporalmente por stub
-    stub = types.ModuleType(module_name)
-    def enviar_registro_a_reintento_o_dlq(registro, es_dlq=False):
-        return None
-    stub.enviar_registro_a_reintento_o_dlq = enviar_registro_a_reintento_o_dlq
+def enviar_registro_a_reintento_o_dlq(registro, es_dlq=False):
+    """
+    Envía un registro a la cola de retry o DLQ.
+    Maneja errores internos y loguea sin romper el flujo.
+    """
 
-    sys.modules[module_name] = stub
+    try:
+        # Obtener endpoint base y colas desde ENV
+        endpoint = os.getenv("SQS_URL_ENDPOINT", "")
+        retry_suffix = os.getenv("RETRY_QUEUE_URL", "/retry")
+        dlq_suffix = os.getenv("DLQ_QUEUE_URL", "/dlq")
 
-    yield  # aquí se ejecutan los tests
+        cola_suffix = dlq_suffix if es_dlq else retry_suffix
+        queue_url = f"{endpoint}{cola_suffix}"
 
-    # restaurar import real
-    sys.modules.pop(module_name, None)
+        body = {
+            "OperacionesOpenFga": [registro]
+        }
+
+        get_sqs_client().send_message(
+            QueueUrl=queue_url,
+            MessageBody=json.dumps(body)
+        )
+
+        logger.info(
+            f"Registro enviado a {'DLQ' if es_dlq else 'RETRY'}: {cola_suffix} → {json.dumps(body)}"
+        )
+
+    except Exception as e:
+        logger.error("Error enviado mensaje a sqs")
+        logger.error(str(e))
+
+
+# ============================================================================
+# UTIL OPCIONAL PARA DEBUG
+# ============================================================================
+
+def ping():
+    """Función trivial para probar importaciones sin activar boto3"""
+    return "pong"
+
 ```
