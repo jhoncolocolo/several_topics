@@ -46,77 +46,190 @@ Si el paso 1 no es suficiente o si la política requiere menos permisos:
 
 ```python
 ##tests/test_procesador_tabla1.py
-##  src\procesadores\procesador_tabla1.py
-from models.escribir_o_borrar_tupla_peticion import TuplaLlave, EscribirTuplaPeticion
-from utilitarios.constantes import OpenFGARelacion, OpenFGATipo, ErroresLiterales,CuentasValorConstante
-from services.cliente_servicio import clienteServicio
+ import pytest
+from unittest.mock import Mock
+from procesadores.procesador_tabla1 import TABLA1
 from services.excepciones import BadRequestError
-import json
+from utilitarios.constantes import (
+    ErroresLiterales,
+    OpenFGATipo,
+    OpenFGARelacion,
+    CuentasValorConstante
+)
 
-import logging
+# ==============================================
+# FIXTURES
+# ==============================================
 
-logger = logging.getLogger()
-logger.setLevel(logging.INFO)
-
-class TABLA1:
-    _cliente_servicio = None
-
-    def __init__(self):
-        TABLA1._cliente_servicio = clienteServicio()
-
-    def delete(self, event: dict):
-        user = event.get('antigua_data_usr', {}).get('string').strip()
-        ci = event.get('antigua_data_num', {}).get('string').strip()
-
-        if not user or not ci:
-            raise BadRequestError(self.__obtener_tuple_logging_info(user,ci,'delete'))
-
-        request = self._obtener_fga_peticion(user, ci)
-        return TABLA1._cliente_servicio.delete_tuple(request=request)
-
-    def create(self, event: dict):
-        user = event.get('data_usr', {}).get('string').strip()
-        ci = event.get('data_num', {}).get('string').strip()
-
-        if not user or not ci:
-           raise BadRequestError(self.__obtener_tuple_logging_info(user,ci,'create'))
-
-        request = self._obtener_fga_peticion(user, ci)
-        return TABLA1._cliente_servicio.write_tuple(request=request)
-
-    def check(self, event: dict):
-        user = event.get('antigua_data_usr', {}).get('string').strip()
-        ci = event.get('antigua_data_num', {}).get('string').strip()
-
-        if not user or not ci:
-            raise BadRequestError(self.__obtener_tuple_logging_info(user,ci,'verificar'))
-
-        request = self._obtener_fga_peticion(user, ci)
-        exists = TABLA1._cliente_servicio.check_tuple(request=request)
-        return exists
-
-    def update(self, event: dict):
-        user_type = event.get('data_tipo', {}).get('string').strip()
-        doesTupleExists = self.check(event)
-        if user_type == CuentasValorConstante.ES_TIPO_GESTOR and doesTupleExists:
-            isTupleDeleted = self.delete(event)
-            return isTupleDeleted
-        elif user_type == CuentasValorConstante.ES_TIPO_SUPER_POWER and not doesTupleExists:
-            isTupleCreated = self.create(event)
-            return isTupleCreated
-        else:
-            raise BadRequestError(f"{ErroresLiterales.NO_ACTUALIZADO.value}{json.dumps(event)}-existeTupla{doesTupleExists}")
+@pytest.fixture
+def mock_cliente():
+    """
+    Mock de clienteServicio usado por TABLA1.
+    """
+    mock = Mock()
+    mock._fga_config = {"MODEL_ID": "TEST_MODEL_ID"}
+    return mock
 
 
-    def _obtener_fga_peticion(self, user: str, ci: str):
-        _user = {OpenFGATipo.USER.value: user}
-        _object = {OpenFGATipo.PROFILE.value: ci}
-        TUPLA_LLAVE = TuplaLlave(user=_user, relation=OpenFGARelacion.USER_ADMIN_CI, object=_object)
-        request = EscribirTuplaPeticion(tuple_key= TUPLA_LLAVE, modelo_autorizacion_id= self._cliente_servicio._fga_config['MODEL_ID'])
-        return request
-    
-    def __obtener_tuple_logging_info(self,usuario:str,ci:str,type:str):
-        return f"{ErroresLiterales.INFORMACION_FALTANTE_TABLA1.value}usuario:{usuario},ci:{ci},tipo:{type}"
+@pytest.fixture
+def tabla1(monkeypatch, mock_cliente):
+    """
+    Crea una instancia de TABLA1 con clienteServicio mockeado.
+    """
+    monkeypatch.setattr(
+        "procesadores.procesador_tabla1.clienteServicio",
+        lambda: mock_cliente
+    )
+    return TABLA1()
+
+
+# ==============================================
+# BASE EVENT
+# ==============================================
+
+BASE_EVENT = {
+    "data_usr": {"string": "user123"},
+    "data_num": {"string": "CI100"},
+    "data_tipo": {"string": "G"},
+    "antigua_data_usr": {"string": "userOld"},
+    "antigua_data_num": {"string": "CI999"},
+}
+
+
+# ==============================================
+# DELETE
+# ==============================================
+
+def test_delete_success(tabla1, mock_cliente):
+    mock_cliente.delete_tuple.return_value = "OK"
+
+    result = tabla1.delete(BASE_EVENT)
+
+    assert result == "OK"
+    mock_cliente.delete_tuple.assert_called_once()
+
+
+def test_delete_missing_fields(tabla1):
+    event = {"antigua_data_usr": {"string": ""}, "antigua_data_num": {"string": ""}}
+
+    with pytest.raises(BadRequestError) as err:
+        tabla1.delete(event)
+
+    assert "usuario:,ci:,tipo:delete" in str(err.value)
+
+
+# ==============================================
+# CREATE
+# ==============================================
+
+def test_create_success(tabla1, mock_cliente):
+    mock_cliente.write_tuple.return_value = "CREATED"
+
+    result = tabla1.create(BASE_EVENT)
+
+    assert result == "CREATED"
+    mock_cliente.write_tuple.assert_called_once()
+
+
+def test_create_missing_fields(tabla1):
+    event = {"data_usr": {"string": ""}, "data_num": {"string": ""}}
+
+    with pytest.raises(BadRequestError):
+        tabla1.create(event)
+
+
+# ==============================================
+# CHECK
+# ==============================================
+
+def test_check_success(tabla1, mock_cliente):
+    mock_cliente.check_tuple.return_value = True
+
+    result = tabla1.check(BASE_EVENT)
+
+    assert result is True
+    mock_cliente.check_tuple.assert_called_once()
+
+
+def test_check_missing_fields(tabla1):
+    event = {"antigua_data_usr": {"string": ""}, "antigua_data_num": {"string": ""}}
+
+    with pytest.raises(BadRequestError):
+        tabla1.check(event)
+
+
+# ==============================================
+# UPDATE – 3 caminos
+# ==============================================
+
+def test_update_case_A_calls_delete(tabla1, mock_cliente):
+    """
+    Caso A:
+    Tipo = GESTOR, tupla existe -> DELETE
+    """
+    mock_cliente.check_tuple.return_value = True
+    mock_cliente.delete_tuple.return_value = "DELETED"
+
+    result = tabla1.update(BASE_EVENT)
+
+    assert result == "DELETED"
+    mock_cliente.delete_tuple.assert_called_once()
+
+
+def test_update_case_B_calls_create(tabla1, mock_cliente):
+    """
+    Caso B:
+    Tipo = SUPER_POWER, tupla NO existe -> CREATE
+    """
+    event = dict(BASE_EVENT)
+    event["data_tipo"]["string"] = CuentasValorConstante.ES_TIPO_SUPER_POWER.value
+
+    mock_cliente.check_tuple.return_value = False
+    mock_cliente.write_tuple.return_value = "CREATED"
+
+    result = tabla1.update(event)
+
+    assert result == "CREATED"
+    mock_cliente.write_tuple.assert_called_once()
+
+
+def test_update_case_C_raises(tabla1, mock_cliente):
+    """
+    Caso C:
+    Ninguna condición válida -> ERROR
+    """
+    event = dict(BASE_EVENT)
+    event["data_tipo"]["string"] = "X"
+
+    mock_cliente.check_tuple.return_value = False
+
+    with pytest.raises(BadRequestError):
+        tabla1.update(event)
+
+
+# ==============================================
+# _obtener_fga_peticion
+# ==============================================
+
+def test_obtener_fga_peticion(tabla1, mock_cliente):
+    req = tabla1._obtener_fga_peticion("userABC", "CI777")
+
+    assert req.modelo_autorizacion_id == "TEST_MODEL_ID"
+    assert req.tuple_key.relation == OpenFGARelacion.USER_ADMIN_CI
+    assert req.tuple_key.user == {OpenFGATipo.USER.value: "userABC"}
+    assert req.tuple_key.object == {OpenFGATipo.PROFILE.value: "CI777"}
+
+
+# ==============================================
+# __obtener_tuple_logging_info
+# ==============================================
+
+def test_obtener_tuple_logging_info(tabla1):
+    msg = tabla1._TABLA1__obtener_tuple_logging_info("u1", "ci1", "delete")
+
+    assert ErroresLiterales.INFORMACION_FALTANTE_TABLA1.value in msg
+    assert "usuario:u1,ci:ci1,tipo:delete" in msg
+
 
 ## tests/test_funcion_evento.py
 import pytest
