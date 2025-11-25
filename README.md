@@ -530,28 +530,32 @@ class ExampleLoggingHelperTest {
     // TEST 3: Escritura de un objeto completo en JSON
     // ============================
     @Test
-    void testBitacorearArchivo_writesJsonObjectCorrectly() throws Exception {
-        class Dummy {
-            public String name = "Luis";
-            public int age = 22;
-        }
+void testBitacorearArchivo_writesJsonObjectCorrectly() throws Exception {
 
-        Dummy data = new Dummy();
+    Dummy data = new Dummy();
+    data.name = "Luis";
+    data.age = 22;
 
-        helper.bitacorearArchivo("objeto.json", data);
+    helper.bitacorearArchivo("objeto.json", data);
 
-        Path logFile = tempDir.resolve("objeto.json");
+    Path logFile = tempDir.resolve("objeto.json");
 
-        waitUntilFileHasContent(logFile, 1500);
+    waitUntilFileHasContent(logFile, 1500);
 
-        String content = Files.readAllLines(logFile).get(0);
+    String content = Files.readAllLines(logFile).get(0);
 
-        ObjectMapper mapper = new ObjectMapper();
-        Dummy result = mapper.readValue(content, Dummy.class);
+    ObjectMapper mapper = new ObjectMapper();
+    Dummy result = mapper.readValue(content, Dummy.class);
 
-        assertEquals("Luis", result.name);
-        assertEquals(22, result.age);
-    }
+    assertEquals("Luis", result.name);
+    assertEquals(22, result.age);
+}
+
+static class Dummy {
+    public String name;
+    public int age;
+}
+
 
     // ============================
     // TEST 4: Fuerza una excepción en la escritura (path inválido)
