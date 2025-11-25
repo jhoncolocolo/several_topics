@@ -444,7 +444,7 @@ def test_msk_success(patch_env):
 ```
 
 ```
-package example.clientes;
+ package example.clientes;
 
 import examples.modelos.CyberArkCredential;
 import org.junit.jupiter.api.BeforeEach;
@@ -465,11 +465,12 @@ class CyberArkClientTest {
     @Mock
     private WebClient webClient;
 
+    // SIN GENERICS – SOLUCIÓN AL PROBLEMA
     @Mock
-    private WebClient.RequestHeadersUriSpec<?> requestHeadersUriSpec;
+    private WebClient.RequestHeadersUriSpec requestHeadersUriSpec;
 
     @Mock
-    private WebClient.RequestHeadersSpec<?> requestHeadersSpec;
+    private WebClient.RequestHeadersSpec requestHeadersSpec;
 
     @Mock
     private WebClient.ResponseSpec responseSpec;
@@ -482,57 +483,55 @@ class CyberArkClientTest {
         MockitoAnnotations.openMocks(this);
     }
 
-    // ==========================
-    // TEST 1: Flujo normal
-    // ==========================
+
     @Test
     void testObtenerCredencial_retornaCredencialCorrecta() {
 
         CyberArkCredential expected = new CyberArkCredential();
-        setField(expected, "content", "123");
-        setField(expected, "userName", "admin");
-        setField(expected, "address", "10.10.10.1");
-        setField(expected, "status", "OK");
+        set("content", expected, "123");
+        set("userName", expected, "admin");
+        set("address", expected, "10.10.10.1");
+        set("status", expected, "OK");
 
-        // mock chain
         when(webClient.get()).thenReturn(requestHeadersUriSpec);
 
-        // Desambiguamos la sobrecarga indicando el tipo Function<UriBuilder,URI>
         when(requestHeadersUriSpec.uri(Mockito.<Function<UriBuilder, URI>>any()))
                 .thenReturn(requestHeadersSpec);
 
         when(requestHeadersSpec.retrieve()).thenReturn(responseSpec);
-        when(responseSpec.bodyToMono(CyberArkCredential.class)).thenReturn(Mono.just(expected));
+
+        when(responseSpec.bodyToMono(CyberArkCredential.class))
+                .thenReturn(Mono.just(expected));
 
         CyberArkCredential result = cyberArkClient.obtenerCredencial();
 
         assertNotNull(result);
-        assertEquals("123", readField(result, "content"));
-        assertEquals("admin", readField(result, "userName"));
-        assertEquals("10.10.10.1", readField(result, "address"));
-        assertEquals("OK", readField(result, "status"));
+        assertEquals("123", get(result, "content"));
+        assertEquals("admin", get(result, "userName"));
+        assertEquals("10.10.10.1", get(result, "address"));
+        assertEquals("OK", get(result, "status"));
 
-        // verificaciones (usando el matcher tipado nuevamente para uri)
         verify(webClient).get();
         verify(requestHeadersUriSpec).uri(Mockito.<Function<UriBuilder, URI>>any());
         verify(requestHeadersSpec).retrieve();
         verify(responseSpec).bodyToMono(CyberArkCredential.class);
     }
 
-    // ==========================
-    // TEST 2: Cuando WebClient devuelve error (Mono.error)
-    // ==========================
+
     @Test
-    void testObtenerCredencial_lanzaExcepcionCuandoWebClientFalla() {
+    void testObtenerCredencial_cuandoFallaLanzaExcepcion() {
 
         when(webClient.get()).thenReturn(requestHeadersUriSpec);
-        when(requestHeadersUriSpec.uri(Mockito.<Function<UriBuilder, URI>>any())).thenReturn(requestHeadersSpec);
+        when(requestHeadersUriSpec.uri(Mockito.<Function<UriBuilder, URI>>any()))
+                .thenReturn(requestHeadersSpec);
         when(requestHeadersSpec.retrieve()).thenReturn(responseSpec);
 
         when(responseSpec.bodyToMono(CyberArkCredential.class))
-                .thenReturn(Mono.error(new RuntimeException("Falla en servidor")));
+                .thenReturn(Mono.error(new RuntimeException("Falla")));
 
-        assertThrows(RuntimeException.class, () -> cyberArkClient.obtenerCredencial());
+        assertThrows(RuntimeException.class,
+                () -> cyberArkClient.obtenerCredencial()
+        );
 
         verify(webClient).get();
         verify(requestHeadersUriSpec).uri(Mockito.<Function<UriBuilder, URI>>any());
@@ -540,29 +539,28 @@ class CyberArkClientTest {
         verify(responseSpec).bodyToMono(CyberArkCredential.class);
     }
 
-    // ==========================
-    // Helpers para leer/escribir campos privados por reflexión
-    // ==========================
-    private void setField(Object obj, String fieldName, Object value) {
+
+
+    // ============================================================
+    // Helpers reflection
+    // ============================================================
+
+    private void set(String field, Object obj, Object value) {
         try {
-            var f = obj.getClass().getDeclaredField(fieldName);
+            var f = obj.getClass().getDeclaredField(field);
             f.setAccessible(true);
             f.set(obj, value);
-        } catch (Exception ignored) {
-        }
+        } catch (Exception ignored) {}
     }
 
-    private String readField(Object obj, String fieldName) {
+    private Object get(Object obj, String field) {
         try {
-            var f = obj.getClass().getDeclaredField(fieldName);
+            var f = obj.getClass().getDeclaredField(field);
             f.setAccessible(true);
-            Object v = f.get(obj);
-            return v != null ? v.toString() : null;
-        } catch (Exception ignored) {
-        }
+            return f.get(obj);
+        } catch (Exception ignored) {}
         return null;
     }
 }
-
 
 ```
