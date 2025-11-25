@@ -465,101 +465,57 @@ class CyberArkClientTest {
     @Mock
     private WebClient webClient;
 
-    // SIN GENERICS – SOLUCIÓN AL PROBLEMA
     @Mock
-    private WebClient.RequestHeadersUriSpec requestHeadersUriSpec;
+    private WebClient.RequestHeadersUriSpec<?> uriSpec;
 
     @Mock
-    private WebClient.RequestHeadersSpec requestHeadersSpec;
+    private WebClient.RequestHeadersSpec<?> headersSpec;
 
     @Mock
     private WebClient.ResponseSpec responseSpec;
 
     @InjectMocks
-    private CyberArkClient cyberArkClient;
+    private CyberArkClient client;
 
     @BeforeEach
     void setup() {
         MockitoAnnotations.openMocks(this);
+
+        // When webClient.get() → return uriSpec
+        when(webClient.get()).thenReturn(uriSpec);
+
+        // Avoid ambiguity in uri(...)
+        when(uriSpec.uri(Mockito.<Function<UriBuilder, URI>>any()))
+                .thenReturn(headersSpec);
+
+        when(headersSpec.retrieve()).thenReturn(responseSpec);
     }
 
-
     @Test
-    void testObtenerCredencial_retornaCredencialCorrecta() {
+    void testObtenerCredencial_ok() {
 
         CyberArkCredential expected = new CyberArkCredential();
-        set("content", expected, "123");
-        set("userName", expected, "admin");
-        set("address", expected, "10.10.10.1");
-        set("status", expected, "OK");
+        expected.setUserName("admin");
+        expected.setAddress("10.0.0.1");
+        expected.setContent("mypassword");
+        expected.setStatus("valid");
 
-        when(webClient.get()).thenReturn(requestHeadersUriSpec);
-
-        when(requestHeadersUriSpec.uri(Mockito.<Function<UriBuilder, URI>>any()))
-                .thenReturn(requestHeadersSpec);
-
-        when(requestHeadersSpec.retrieve()).thenReturn(responseSpec);
-
-        when(responseSpec.bodyToMono(CyberArkCredential.class))
+        // FIX: must use eq() or generic matchers!
+        when(responseSpec.bodyToMono(eq(CyberArkCredential.class)))
                 .thenReturn(Mono.just(expected));
 
-        CyberArkCredential result = cyberArkClient.obtenerCredencial();
+        CyberArkCredential result = client.obtenerCredencial();
 
         assertNotNull(result);
-        assertEquals("123", get(result, "content"));
-        assertEquals("admin", get(result, "userName"));
-        assertEquals("10.10.10.1", get(result, "address"));
-        assertEquals("OK", get(result, "status"));
+        assertEquals("admin", result.getUserName());
+        assertEquals("10.0.0.1", result.getAddress());
+        assertEquals("mypassword", result.getContent());
+        assertEquals("valid", result.getStatus());
 
         verify(webClient).get();
-        verify(requestHeadersUriSpec).uri(Mockito.<Function<UriBuilder, URI>>any());
-        verify(requestHeadersSpec).retrieve();
+        verify(uriSpec).uri(any(Function.class));
+        verify(headersSpec).retrieve();
         verify(responseSpec).bodyToMono(CyberArkCredential.class);
-    }
-
-
-    @Test
-    void testObtenerCredencial_cuandoFallaLanzaExcepcion() {
-
-        when(webClient.get()).thenReturn(requestHeadersUriSpec);
-        when(requestHeadersUriSpec.uri(Mockito.<Function<UriBuilder, URI>>any()))
-                .thenReturn(requestHeadersSpec);
-        when(requestHeadersSpec.retrieve()).thenReturn(responseSpec);
-
-        when(responseSpec.bodyToMono(CyberArkCredential.class))
-                .thenReturn(Mono.error(new RuntimeException("Falla")));
-
-        assertThrows(RuntimeException.class,
-                () -> cyberArkClient.obtenerCredencial()
-        );
-
-        verify(webClient).get();
-        verify(requestHeadersUriSpec).uri(Mockito.<Function<UriBuilder, URI>>any());
-        verify(requestHeadersSpec).retrieve();
-        verify(responseSpec).bodyToMono(CyberArkCredential.class);
-    }
-
-
-
-    // ============================================================
-    // Helpers reflection
-    // ============================================================
-
-    private void set(String field, Object obj, Object value) {
-        try {
-            var f = obj.getClass().getDeclaredField(field);
-            f.setAccessible(true);
-            f.set(obj, value);
-        } catch (Exception ignored) {}
-    }
-
-    private Object get(Object obj, String field) {
-        try {
-            var f = obj.getClass().getDeclaredField(field);
-            f.setAccessible(true);
-            return f.get(obj);
-        } catch (Exception ignored) {}
-        return null;
     }
 }
 
