@@ -444,117 +444,27 @@ def test_msk_success(patch_env):
 ```
 
 ```
-📄 REQUERIMIENTO DEVOPS – Integración Lambda + SQS Retry/DLQ
-✅ Objetivo
+✅ ¿QUÉ PERMISO LE FALTA A TU USUARIO?
 
-Configurar la Lambda:
-
-lambda-msk-sqs-demo-main-lambda
-
-Para integrarse correctamente con:
-
-SQS Retry: lambda-msk-sqs-demo-retry
-
-SQS DLQ: lambda-msk-sqs-demo-dlq
-
-IAM Role de ejecución: lambda-msk-sqs-demo-lambda-role
-
-La Lambda debe:
-
-Recibir mensajes desde la cola retry
-
-Enviar mensajes a retry y a la DLQ
-
-1️⃣ Agregar Trigger SQS a la Lambda
-
-Configurar la cola lambda-msk-sqs-demo-retry como disparador de la Lambda.
-
-Pasos:
-
-Abrir Lambda en AWS Console
-
-Seleccionar lambda-msk-sqs-demo-main-lambda
-
-Ir a Configuration → Triggers
-
-Click en Add trigger
-
-Seleccionar SQS
-
-Elegir la cola → lambda-msk-sqs-demo-retry
-
-2️⃣ Agregar permisos al role lambda-msk-sqs-demo-lambda-role
-
-El role necesita permisos para:
-
-✔ Recibir mensajes
-✔ Procesar y eliminar mensajes
-✔ Enviar mensajes a Retry y DLQ
-
-Agregar esta Inline Policy:
+Tu usuario necesita esta política:
 
 {
-    "Version": "2012-10-17",
-    "Statement": [
-        {
-            "Sid": "AllowLambdaToReadRetryQueue",
-            "Effect": "Allow",
-            "Action": [
-                "sqs:ReceiveMessage",
-                "sqs:DeleteMessage",
-                "sqs:GetQueueAttributes"
-            ],
-            "Resource": "arn:aws:sqs:<REGION>:<ACCOUNT_ID>:lambda-msk-sqs-demo-retry"
-        },
-        {
-            "Sid": "AllowLambdaToSendRetryAndDLQ",
-            "Effect": "Allow",
-            "Action": [
-                "sqs:SendMessage"
-            ],
-            "Resource": [
-                "arn:aws:sqs:<REGION>:<ACCOUNT_ID>:lambda-msk-sqs-demo-retry",
-                "arn:aws:sqs:<REGION>:<ACCOUNT_ID>:lambda-msk-sqs-demo-dlq"
-            ]
-        }
-    ]
+  "Effect": "Allow",
+  "Action": [
+    "lambda:InvokeFunction",
+    "lambda:InvokeAsync"
+  ],
+  "Resource": "arn:aws:lambda:<REGION>:<ACCOUNT_ID>:function:lambda-msk-sqs-demo-main-lambda"
 }
 
-
-Reemplazar <REGION> y <ACCOUNT_ID> por los valores del ambiente.
-
-3️⃣ Verificar policy de invocación de SQS hacia Lambda
-
-Ir a:
-
-Lambda → Configuration → Permissions → Resource-based policy
-
-Debe existir una declaración similar:
-
+sqs
 {
-    "Effect": "Allow",
-    "Principal": {
-        "Service": "sqs.amazonaws.com"
-    },
-    "Action": "lambda:InvokeFunction",
-    "Resource": "arn:aws:lambda:<REGION>:<ACCOUNT_ID>:function:lambda-msk-sqs-demo-main-lambda",
-    "Condition": {
-        "ArnLike": {
-            "AWS:SourceArn": "arn:aws:sqs:<REGION>:<ACCOUNT_ID>:lambda-msk-sqs-demo-retry"
-        }
-    }
+  "Effect": "Allow",
+  "Action": [
+    "sqs:SendMessage",
+    "sqs:GetQueueAttributes"
+  ],
+  "Resource": "arn:aws:sqs:<region>:<account-id>:lambda-msk-sqs-demo-retry"
 }
-
-4️⃣ Resultado esperado
-
-Después de aplicar los cambios:
-
-La Lambda podrá procesar mensajes desde Retry
-
-La Lambda podrá enviar mensajes a Retry y DLQ
-
-Flujo final funcionando:
-
-MSK → Lambda → Falla → Retry SQS → Lambda → Falla → DLQ
 
 ```
