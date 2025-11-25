@@ -444,27 +444,122 @@ def test_msk_success(patch_env):
 ```
 
 ```
-✅ ¿QUÉ PERMISO LE FALTA A TU USUARIO?
+ package example.helpers;
 
-Tu usuario necesita esta política:
+import com.fasterxml.jackson.databind.ObjectMapper;
+import example.configuration.ConfiguracionPropiedadesLogueo;
+import org.junit.jupiter.api.*;
+import java.io.File;
+import java.io.FileWriter;
+import java.nio.file.*;
+import java.util.concurrent.TimeUnit;
 
-{
-  "Effect": "Allow",
-  "Action": [
-    "lambda:InvokeFunction",
-    "lambda:InvokeAsync"
-  ],
-  "Resource": "arn:aws:lambda:<REGION>:<ACCOUNT_ID>:function:lambda-msk-sqs-demo-main-lambda"
+import static org.junit.jupiter.api.Assertions.*;
+
+class ExampleLoggingHelperTest {
+
+    private Path tempDir;
+    private ExampleLoggingHelper helper;
+    private ConfiguracionPropiedadesLogueo config;
+
+    @BeforeEach
+    void setup() throws Exception {
+        tempDir = Files.createTempDirectory("logtest_");
+
+        config = new ConfiguracionPropiedadesLogueo();
+        config.setPath(tempDir.toString());
+
+        helper = new ExampleLoggingHelper(config);
+    }
+
+    @Test
+    void testConstructorSetsLogDirCorrectly() {
+        ExampleLoggingHelper h = new ExampleLoggingHelper(config);
+        assertNotNull(h);
+    }
+
+    @Test
+    void testBitacorearArchivo_writesJson_whenPathEndsWithoutSlash() throws Exception {
+        String fileName = "log1.txt";
+        String message = "Hola mundo";
+
+        helper.bitacorearArchivo(fileName, message);
+
+        // Esperamos a que el thread termine
+        TimeUnit.MILLISECONDS.sleep(200);
+
+        Path logFile = tempDir.resolve(fileName);
+
+        assertTrue(Files.exists(logFile));
+        String content = Files.readAllLines(logFile).get(0);
+
+        assertEquals("\"Hola mundo\"", content);
+    }
+
+    @Test
+    void testBitacorearArchivo_writesJson_whenPathEndsWithSlash() throws Exception {
+        config.setPath(tempDir.toString() + "/"); // agregamos slash al final
+        ExampleLoggingHelper h = new ExampleLoggingHelper(config);
+
+        String fileName = "log2.txt";
+        h.bitacorearArchivo(fileName, 123);
+
+        TimeUnit.MILLISECONDS.sleep(200);
+
+        Path filePath = tempDir.resolve(fileName);
+        assertTrue(Files.exists(filePath));
+
+        String content = Files.readAllLines(filePath).get(0);
+        assertEquals("123", content); // JSON del número
+    }
+
+    @Test
+    void testBitacorearArchivo_handlesIOException() throws Exception {
+        // Creamos archivo como carpeta para generar fallo
+        Path directoryInPlaceOfFile = tempDir.resolve("not_a_file.txt");
+        Files.createDirectory(directoryInPlaceOfFile);
+
+        ExampleLoggingHelper h = new ExampleLoggingHelper(config);
+
+        h.bitacorearArchivo("not_a_file.txt", "mensaje");
+
+        TimeUnit.MILLISECONDS.sleep(200);
+
+        // No debe tirar excepción
+        assertTrue(Files.isDirectory(directoryInPlaceOfFile));
+    }
+
+    @Test
+    void testReadFile_returnsContent_ifExists() throws Exception {
+        String fileName = "readtest.txt";
+        Path file = tempDir.resolve(fileName);
+
+        // Creamos archivo con contenido
+        try (FileWriter fw = new FileWriter(file.toFile())) {
+            fw.write("HOLA-TEXTO");
+        }
+
+        String contenido = helper.readFile(fileName);
+
+        assertEquals("HOLA-TEXTO", contenido);
+    }
+
+    @Test
+    void testReadFile_returnsNull_ifFileDoesNotExist() {
+        String result = helper.readFile("archivo_inexistente.txt");
+        assertNull(result);
+    }
+
+    @Test
+    void testReadFile_returnsNull_onException() throws Exception {
+        // Crear directorio donde debería ir el archivo
+        Files.createDirectory(tempDir.resolve("bad.txt"));
+
+        String result = helper.readFile("bad.txt");
+
+        assertNull(result); // porque el método atrapa excepciones
+    }
 }
 
-sqs
-{
-  "Effect": "Allow",
-  "Action": [
-    "sqs:SendMessage",
-    "sqs:GetQueueAttributes"
-  ],
-  "Resource": "arn:aws:sqs:<region>:<account-id>:lambda-msk-sqs-demo-retry"
-}
 
 ```
