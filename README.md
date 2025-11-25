@@ -449,8 +449,9 @@ def test_msk_success(patch_env):
 import com.fasterxml.jackson.databind.ObjectMapper;
 import example.configuration.ConfiguracionPropiedadesLogueo;
 import org.junit.jupiter.api.*;
-import java.io.File;
-import java.io.FileWriter;
+import org.junit.jupiter.api.io.TempDir;
+
+import java.io.IOException;
 import java.nio.file.*;
 import java.util.concurrent.TimeUnit;
 
@@ -458,26 +459,37 @@ import static org.junit.jupiter.api.Assertions.*;
 
 class ExampleLoggingHelperTest {
 
-    private Path tempDir;
+    @TempDir
+    static Path tempDir;
+
     private ExampleLoggingHelper helper;
     private ConfiguracionPropiedadesLogueo config;
 
     @BeforeEach
-    void setup() throws Exception {
-        tempDir = Files.createTempDirectory("logtest_");
-
+    void setUp() {
         config = new ConfiguracionPropiedadesLogueo();
         config.setPath(tempDir.toString());
-
         helper = new ExampleLoggingHelper(config);
     }
 
-    @Test
-    void testConstructorSetsLogDirCorrectly() {
-        ExampleLoggingHelper h = new ExampleLoggingHelper(config);
-        assertNotNull(h);
+    // ============================
+    // UTILIDAD PARA ESPERAR A QUE EL THREAD ESCRIBA
+    // ============================
+    private void waitUntilFileHasContent(Path file, int timeoutMs) throws Exception {
+        int waited = 0;
+        while (waited < timeoutMs) {
+            if (Files.exists(file) && Files.size(file) > 0) {
+                return;
+            }
+            Thread.sleep(20);
+            waited += 20;
+        }
+        throw new IllegalStateException("El archivo nunca recibió contenido");
     }
 
+    // ============================
+    // TEST 1: Escritura cuando el path NO termina en slash
+    // ============================
     @Test
     void testBitacorearArchivo_writesJson_whenPathEndsWithoutSlash() throws Exception {
         String fileName = "log1.txt";
@@ -485,79 +497,110 @@ class ExampleLoggingHelperTest {
 
         helper.bitacorearArchivo(fileName, message);
 
-        // Esperamos a que el thread termine
-        TimeUnit.MILLISECONDS.sleep(200);
-
         Path logFile = tempDir.resolve(fileName);
 
-        assertTrue(Files.exists(logFile));
-        String content = Files.readAllLines(logFile).get(0);
+        waitUntilFileHasContent(logFile, 1500);
 
+        String content = Files.readAllLines(logFile).get(0);
         assertEquals("\"Hola mundo\"", content);
     }
 
+    // ============================
+    // TEST 2: Escritura cuando el path SI termina en slash
+    // ============================
     @Test
     void testBitacorearArchivo_writesJson_whenPathEndsWithSlash() throws Exception {
-        config.setPath(tempDir.toString() + "/"); // agregamos slash al final
-        ExampleLoggingHelper h = new ExampleLoggingHelper(config);
+        config.setPath(tempDir.toString() + "/"); // agrega slash final
+        helper = new ExampleLoggingHelper(config);
 
         String fileName = "log2.txt";
-        h.bitacorearArchivo(fileName, 123);
+        String message = "Otro mensaje";
 
-        TimeUnit.MILLISECONDS.sleep(200);
+        helper.bitacorearArchivo(fileName, message);
 
-        Path filePath = tempDir.resolve(fileName);
-        assertTrue(Files.exists(filePath));
+        Path logFile = tempDir.resolve(fileName);
 
-        String content = Files.readAllLines(filePath).get(0);
-        assertEquals("123", content); // JSON del número
+        waitUntilFileHasContent(logFile, 1500);
+
+        String content = Files.readAllLines(logFile).get(0);
+        assertEquals("\"Otro mensaje\"", content);
     }
 
+    // ============================
+    // TEST 3: Escritura de un objeto completo en JSON
+    // ============================
     @Test
-    void testBitacorearArchivo_handlesIOException() throws Exception {
-        // Creamos archivo como carpeta para generar fallo
-        Path directoryInPlaceOfFile = tempDir.resolve("not_a_file.txt");
-        Files.createDirectory(directoryInPlaceOfFile);
-
-        ExampleLoggingHelper h = new ExampleLoggingHelper(config);
-
-        h.bitacorearArchivo("not_a_file.txt", "mensaje");
-
-        TimeUnit.MILLISECONDS.sleep(200);
-
-        // No debe tirar excepción
-        assertTrue(Files.isDirectory(directoryInPlaceOfFile));
-    }
-
-    @Test
-    void testReadFile_returnsContent_ifExists() throws Exception {
-        String fileName = "readtest.txt";
-        Path file = tempDir.resolve(fileName);
-
-        // Creamos archivo con contenido
-        try (FileWriter fw = new FileWriter(file.toFile())) {
-            fw.write("HOLA-TEXTO");
+    void testBitacorearArchivo_writesJsonObjectCorrectly() throws Exception {
+        class Dummy {
+            public String name = "Luis";
+            public int age = 22;
         }
 
-        String contenido = helper.readFile(fileName);
+        Dummy data = new Dummy();
 
-        assertEquals("HOLA-TEXTO", contenido);
+        helper.bitacorearArchivo("objeto.json", data);
+
+        Path logFile = tempDir.resolve("objeto.json");
+
+        waitUntilFileHasContent(logFile, 1500);
+
+        String content = Files.readAllLines(logFile).get(0);
+
+        ObjectMapper mapper = new ObjectMapper();
+        Dummy result = mapper.readValue(content, Dummy.class);
+
+        assertEquals("Luis", result.name);
+        assertEquals(22, result.age);
     }
 
+    // ============================
+    // TEST 4: Fuerza una excepción en la escritura (path inválido)
+    // ============================
     @Test
-    void testReadFile_returnsNull_ifFileDoesNotExist() {
-        String result = helper.readFile("archivo_inexistente.txt");
+    void testBitacorearArchivo_handlesIOException() throws Exception {
+        config.setPath("/path/invalido/que/no/existe");
+        helper = new ExampleLoggingHelper(config);
+
+        // No debe lanzar excepción aunque el path sea inválido
+        assertDoesNotThrow(() -> helper.bitacorearArchivo("fail.txt", "mensaje"));
+    }
+
+    // ============================
+    // TEST 5: readFile() — archivo existente
+    // ============================
+    @Test
+    void testReadFile_returnsContent_whenFileExists() throws Exception {
+        Path file = tempDir.resolve("read.txt");
+        Files.writeString(file, "linea123");
+
+        String result = helper.readFile("read.txt");
+
+        assertEquals("linea123", result);
+    }
+
+    // ============================
+    // TEST 6: readFile() — archivo no existente
+    // ============================
+    @Test
+    void testReadFile_returnsNull_whenFileDoesNotExist() {
+        String result = helper.readFile("noexiste.txt");
         assertNull(result);
     }
 
+    // ============================
+    // TEST 7: readFile() — error en lectura (permiso denegado)
+    // ============================
     @Test
-    void testReadFile_returnsNull_onException() throws Exception {
-        // Crear directorio donde debería ir el archivo
-        Files.createDirectory(tempDir.resolve("bad.txt"));
+    void testReadFile_handlesErrorGracefully() throws Exception {
+        Path file = tempDir.resolve("locked.txt");
+        Files.writeString(file, "no importa");
 
-        String result = helper.readFile("bad.txt");
+        // forzar error: quitar permisos de lectura
+        file.toFile().setReadable(false);
 
-        assertNull(result); // porque el método atrapa excepciones
+        String result = helper.readFile("locked.txt");
+
+        assertNull(result);
     }
 }
 
