@@ -444,169 +444,117 @@ def test_msk_success(patch_env):
 ```
 
 ```
- package example.helpers;
+package example.clientes;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
-import example.configuration.ConfiguracionPropiedadesLogueo;
-import org.junit.jupiter.api.*;
-import org.junit.jupiter.api.io.TempDir;
-
-import java.io.IOException;
-import java.nio.file.*;
-import java.util.concurrent.TimeUnit;
+import examples.modelos.CyberArkCredential;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.mockito.*;
+import org.springframework.web.reactive.function.client.WebClient;
+import reactor.core.publisher.Mono;
 
 import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.Mockito.*;
 
-class ExampleLoggingHelperTest {
+class CyberArkClientTest {
 
-    @TempDir
-    static Path tempDir;
+    @Mock
+    private WebClient webClient;
 
-    private ExampleLoggingHelper helper;
-    private ConfiguracionPropiedadesLogueo config;
+    @Mock
+    private WebClient.RequestHeadersUriSpec requestHeadersUriSpec;
+
+    @Mock
+    private WebClient.RequestHeadersSpec requestHeadersSpec;
+
+    @Mock
+    private WebClient.ResponseSpec responseSpec;
+
+    @InjectMocks
+    private CyberArkClient cyberArkClient;
 
     @BeforeEach
-    void setUp() {
-        config = new ConfiguracionPropiedadesLogueo();
-        config.setPath(tempDir.toString());
-        helper = new ExampleLoggingHelper(config);
+    void setup() {
+        MockitoAnnotations.openMocks(this);
     }
 
-    // ============================
-    // UTILIDAD PARA ESPERAR A QUE EL THREAD ESCRIBA
-    // ============================
-    private void waitUntilFileHasContent(Path file, int timeoutMs) throws Exception {
-        int waited = 0;
-        while (waited < timeoutMs) {
-            if (Files.exists(file) && Files.size(file) > 0) {
-                return;
-            }
-            Thread.sleep(20);
-            waited += 20;
-        }
-        throw new IllegalStateException("El archivo nunca recibió contenido");
+    // ==========================================
+    // TEST 1: Flujo normal (respuesta correcta)
+    // ==========================================
+    @Test
+    void testObtenerCredencial_retornaCredencialCorrecta() {
+
+        CyberArkCredential expected = new CyberArkCredential();
+        setField(expected, "content", "123");
+        setField(expected, "userName", "admin");
+        setField(expected, "address", "10.10.10.1");
+        setField(expected, "status", "OK");
+
+        // MOCK chain:
+
+        // 1) webClient.get()
+        when(webClient.get()).thenReturn(requestHeadersUriSpec);
+
+        // 2) .uri(...)
+        when(requestHeadersUriSpec.uri(any())).thenReturn(requestHeadersSpec);
+
+        // 3) .retrieve()
+        when(requestHeadersSpec.retrieve()).thenReturn(responseSpec);
+
+        // 4) .bodyToMono()
+        when(responseSpec.bodyToMono(CyberArkCredential.class)).thenReturn(Mono.just(expected));
+
+        CyberArkCredential result = cyberArkClient.obtenerCredencial();
+
+        assertNotNull(result);
+        assertEquals("123", readField(result, "content"));
+        assertEquals("admin", readField(result, "userName"));
+        assertEquals("10.10.10.1", readField(result, "address"));
+        assertEquals("OK", readField(result, "status"));
+
+        // verifica que toda la cadena fue usada
+        verify(webClient).get();
+        verify(requestHeadersUriSpec).uri(any());
+        verify(requestHeadersSpec).retrieve();
+        verify(responseSpec).bodyToMono(CyberArkCredential.class);
     }
 
-    // ============================
-    // TEST 1: Escritura cuando el path NO termina en slash
-    // ============================
+    // ==========================================
+    // TEST 2: Cuando WebClient devuelve error
+    // ==========================================
     @Test
-    void testBitacorearArchivo_writesJson_whenPathEndsWithoutSlash() throws Exception {
-        String fileName = "log1.txt";
-        String message = "Hola mundo";
+    void testObtenerCredencial_lanzaExcepcionCuandoWebClientFalla() {
 
-        helper.bitacorearArchivo(fileName, message);
+        when(webClient.get()).thenReturn(requestHeadersUriSpec);
+        when(requestHeadersUriSpec.uri(any())).thenReturn(requestHeadersSpec);
+        when(requestHeadersSpec.retrieve()).thenReturn(responseSpec);
 
-        Path logFile = tempDir.resolve(fileName);
+        // Forzamos error
+        when(responseSpec.bodyToMono(CyberArkCredential.class))
+                .thenReturn(Mono.error(new RuntimeException("Falla en servidor")));
 
-        waitUntilFileHasContent(logFile, 1500);
-
-        String content = Files.readAllLines(logFile).get(0);
-        assertEquals("\"Hola mundo\"", content);
+        assertThrows(RuntimeException.class, () -> cyberArkClient.obtenerCredencial());
     }
 
-    // ============================
-    // TEST 2: Escritura cuando el path SI termina en slash
-    // ============================
-    @Test
-    void testBitacorearArchivo_writesJson_whenPathEndsWithSlash() throws Exception {
-        config.setPath(tempDir.toString() + "/"); // agrega slash final
-        helper = new ExampleLoggingHelper(config);
-
-        String fileName = "log2.txt";
-        String message = "Otro mensaje";
-
-        helper.bitacorearArchivo(fileName, message);
-
-        Path logFile = tempDir.resolve(fileName);
-
-        waitUntilFileHasContent(logFile, 1500);
-
-        String content = Files.readAllLines(logFile).get(0);
-        assertEquals("\"Otro mensaje\"", content);
+    // ==========================================
+    // Helpers para leer/escribir campos privados
+    // ==========================================
+    private void setField(Object obj, String fieldName, Object value) {
+        try {
+            var f = obj.getClass().getDeclaredField(fieldName);
+            f.setAccessible(true);
+            f.set(obj, value);
+        } catch (Exception ignored) {}
     }
 
-    // ============================
-    // TEST 3: Escritura de un objeto completo en JSON
-    // ============================
-    @Test
-void testBitacorearArchivo_writesJsonObjectCorrectly() throws Exception {
-
-    Dummy data = new Dummy();
-    data.name = "Luis";
-    data.age = 22;
-
-    helper.bitacorearArchivo("objeto.json", data);
-
-    Path logFile = tempDir.resolve("objeto.json");
-
-    waitUntilFileHasContent(logFile, 1500);
-
-    String content = Files.readAllLines(logFile).get(0);
-
-    ObjectMapper mapper = new ObjectMapper();
-    Dummy result = mapper.readValue(content, Dummy.class);
-
-    assertEquals("Luis", result.name);
-    assertEquals(22, result.age);
-}
-
-static class Dummy {
-    public String name;
-    public int age;
-}
-
-
-    // ============================
-    // TEST 4: Fuerza una excepción en la escritura (path inválido)
-    // ============================
-    @Test
-    void testBitacorearArchivo_handlesIOException() throws Exception {
-        config.setPath("/path/invalido/que/no/existe");
-        helper = new ExampleLoggingHelper(config);
-
-        // No debe lanzar excepción aunque el path sea inválido
-        assertDoesNotThrow(() -> helper.bitacorearArchivo("fail.txt", "mensaje"));
-    }
-
-    // ============================
-    // TEST 5: readFile() — archivo existente
-    // ============================
-    @Test
-    void testReadFile_returnsContent_whenFileExists() throws Exception {
-        Path file = tempDir.resolve("read.txt");
-        Files.writeString(file, "linea123");
-
-        String result = helper.readFile("read.txt");
-
-        assertEquals("linea123", result);
-    }
-
-    // ============================
-    // TEST 6: readFile() — archivo no existente
-    // ============================
-    @Test
-    void testReadFile_returnsNull_whenFileDoesNotExist() {
-        String result = helper.readFile("noexiste.txt");
-        assertNull(result);
-    }
-
-    // ============================
-    // TEST 7: readFile() — error en lectura (permiso denegado)
-    // ============================
-    @Test
-    void testReadFile_handlesErrorGracefully() throws Exception {
-        Path file = tempDir.resolve("locked.txt");
-        Files.writeString(file, "no importa");
-
-        // forzar error: quitar permisos de lectura
-        file.toFile().setReadable(false);
-
-        String result = helper.readFile("locked.txt");
-
-        assertNull(result);
+    private Object readField(Object obj, String fieldName) {
+        try {
+            var f = obj.getClass().getDeclaredField(fieldName);
+            f.setAccessible(true);
+            return f.get(obj);
+        } catch (Exception ignored) {}
+        return null;
     }
 }
-
 
 ```
