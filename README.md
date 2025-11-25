@@ -465,11 +465,12 @@ class CyberArkClientTest {
     @Mock
     private WebClient webClient;
 
+    // RAW TYPES → evita errores genéricos de Mockito
     @Mock
-    private WebClient.RequestHeadersUriSpec<?> uriSpec;
+    private WebClient.RequestHeadersUriSpec requestHeadersUriSpec;
 
     @Mock
-    private WebClient.RequestHeadersSpec<?> headersSpec;
+    private WebClient.RequestHeadersSpec requestHeadersSpec;
 
     @Mock
     private WebClient.ResponseSpec responseSpec;
@@ -477,20 +478,24 @@ class CyberArkClientTest {
     @InjectMocks
     private CyberArkClient client;
 
+    @Captor
+    private ArgumentCaptor<Function<UriBuilder, URI>> uriCaptor;
+
     @BeforeEach
     void setup() {
         MockitoAnnotations.openMocks(this);
 
-        // When webClient.get() → return uriSpec
-        when(webClient.get()).thenReturn(uriSpec);
+        when(webClient.get()).thenReturn(requestHeadersUriSpec);
 
-        // Avoid ambiguity in uri(...)
-        when(uriSpec.uri(Mockito.<Function<UriBuilder, URI>>any()))
-                .thenReturn(headersSpec);
+        when(requestHeadersUriSpec.uri(Mockito.<Function<UriBuilder, URI>>any()))
+                .thenReturn(requestHeadersSpec);
 
-        when(headersSpec.retrieve()).thenReturn(responseSpec);
+        when(requestHeadersSpec.retrieve()).thenReturn(responseSpec);
     }
 
+    // -------------------------------------------------------------------------
+    // 1. TEST CORRECTO
+    // -------------------------------------------------------------------------
     @Test
     void testObtenerCredencial_ok() {
 
@@ -500,7 +505,6 @@ class CyberArkClientTest {
         expected.setContent("mypassword");
         expected.setStatus("valid");
 
-        // FIX: must use eq() or generic matchers!
         when(responseSpec.bodyToMono(eq(CyberArkCredential.class)))
                 .thenReturn(Mono.just(expected));
 
@@ -511,12 +515,100 @@ class CyberArkClientTest {
         assertEquals("10.0.0.1", result.getAddress());
         assertEquals("mypassword", result.getContent());
         assertEquals("valid", result.getStatus());
+    }
 
-        verify(webClient).get();
-        verify(uriSpec).uri(any(Function.class));
-        verify(headersSpec).retrieve();
-        verify(responseSpec).bodyToMono(CyberArkCredential.class);
+    // -------------------------------------------------------------------------
+    // 2. TEST: Cuando WebClient lanza una excepción
+    // -------------------------------------------------------------------------
+    @Test
+    void testObtenerCredencial_errorEnWebClient() {
+
+        when(responseSpec.bodyToMono(eq(CyberArkCredential.class)))
+                .thenReturn(Mono.error(new RuntimeException("FAIL")));
+
+        assertThrows(RuntimeException.class, () -> client.obtenerCredencial());
+    }
+
+    // -------------------------------------------------------------------------
+    // 3. TEST: Cuando bodyToMono devuelve Mono.empty()
+    // -------------------------------------------------------------------------
+    @Test
+    void testObtenerCredencial_monoEmpty() {
+
+        when(responseSpec.bodyToMono(eq(CyberArkCredential.class)))
+                .thenReturn(Mono.empty());
+
+        CyberArkCredential result = client.obtenerCredencial();
+
+        assertNull(result); // block() → null
+    }
+
+    // -------------------------------------------------------------------------
+    // 4. TEST: Validar URI EXACTA generada por el cliente
+    // -------------------------------------------------------------------------
+    @Test
+    void testObtenerCredencial_uriGeneradaCorrectamente() {
+
+        when(responseSpec.bodyToMono(eq(CyberArkCredential.class)))
+                .thenReturn(Mono.just(new CyberArkCredential()));
+
+        client.obtenerCredencial();
+
+        // Capturar el Function<UriBuilder, URI>
+        verify(requestHeadersUriSpec).uri(uriCaptor.capture());
+
+        Function<UriBuilder, URI> fn = uriCaptor.getValue();
+
+        URI builtUri = fn.apply(new UriBuilder() {
+            // Implementación mínima para probar construcción de URI
+            private String path = "";
+            private String query = "";
+
+            @Override
+            public UriBuilder scheme(String s) { return this; }
+            @Override
+            public UriBuilder host(String h) { return this; }
+            @Override
+            public UriBuilder port(int p) { return this; }
+
+            @Override
+            public UriBuilder path(String p) {
+                this.path = p;
+                return this;
+            }
+
+            @Override
+            public UriBuilder queryParam(String name, Object... values) {
+                if (!query.isEmpty()) query += "&";
+                query += name + "=" + values[0];
+                return this;
+            }
+
+            @Override
+            public URI build(Object... values) {
+                return URI.create(path + "?" + query);
+            }
+        });
+
+        // Validación exacta
+        assertEquals(
+                "/AIMWebService/api/Accounts/Query?AppID=&Safe=MYSAFE&Object=MY_OBJETC",
+                builtUri.toString()
+        );
+    }
+
+    // -------------------------------------------------------------------------
+    // 5. TEST: Cuando block() lanza excepción interna del reactor
+    // -------------------------------------------------------------------------
+    @Test
+    void testObtenerCredencial_blockLanzaError() {
+
+        when(responseSpec.bodyToMono(eq(CyberArkCredential.class)))
+                .thenReturn(Mono.error(new IllegalStateException("reactor error")));
+
+        assertThrows(IllegalStateException.class, () -> client.obtenerCredencial());
     }
 }
+
 
 ```
