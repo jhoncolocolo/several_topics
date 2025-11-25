@@ -45,204 +45,244 @@ Si el paso 1 no es suficiente o si la política requiere menos permisos:
     `
 
 ```python
-## test_cliente_servicio.py
+# tests/test_procesador.py
+
+import sys
+import types
+import json
+import base64
 import pytest
 from unittest.mock import Mock
-import json
 
-from services.cliente_servicio import clienteServicio
-from services.excepciones import OpenFGAError
-from models.escribir_o_borrar_tupla_peticion import (
-    EscribirTuplaPeticion,
-    TuplaLlave,
+# =============================================================
+# SEGURIDAD AL IMPORTAR (IMPORT SAFETY)
+# =============================================================
+# El módulo real `services.openfga_sync_retry_hander` crea clientes boto3
+# al momento de importarse, lo cual rompe los tests.
+# Para evitar eso, antes de importar `services.procesador`, inyectamos
+# un "stub" (módulo falso) con una función mínima.
+# Esto evita que boto3 se inicialice durante la importación.
+# =============================================================
+
+stub_module_name = "services.openfga_sync_retry_hander"
+
+# Solo si el módulo no existe aún, lo creamos manualmente
+if stub_module_name not in sys.modules:
+
+    # Creamos un módulo vacío dinámicamente
+    stub = types.ModuleType(stub_module_name)
+
+    # Definimos una función falsa que reemplaza la real
+    def enviar_registro_a_reintento_o_dlq(registro, es_dlq=False):
+        # No hace nada. En los tests la vamos a reemplazar con monkeypatch.
+        return None
+
+    # Asignamos esa función al módulo stub
+    stub.enviar_registro_a_reintento_o_dlq = enviar_registro_a_reintento_o_dlq
+
+    # Registramos el módulo falso en sys.modules
+    sys.modules[stub_module_name] = stub
+
+# Ahora importamos el módulo principal SIN activar boto3 ni SQS
+import importlib
+procesador_module = importlib.import_module("services.procesador")
+
+# Importamos las excepciones para usarlas en asserts
+from services.excepciones import (
+    BadRequestError,
+    RedisError,
+    TransientError,
+    OpenFGAError
 )
-from utilitarios.constantes import OpenFGARelacion, OpenFGATipo
+
+# =============================================================
+# EVENTO BASE DE PRUEBA
+# =============================================================
+# Este es el cuerpo típico de un evento proveniente de MSK o SQS.
+# Simula la estructura real que llega desde los procesadores.
+# =============================================================
+
+BASE_EVENT = {
+    "antigua_data_usr": {"string": "my_usr"},
+    "antigua_data_num": {"string": "B_0000001"},
+    "antigua_data_tipo": {"string": "G"},
+    "antigua_fuente": {"string": "TABLA1"},
+    "data_usr": {"string": "my_usr"},
+    "data_num": {"string": "B_0000001"},
+    "data_tipo": {"string": "S"},
+    "fuente": {"string": "TABLA1"},
+    "EVENTO_TIPO": {"string": "EL"},
+    "ARG_TIMESTAMP": {"string": "2025-11-20 15:16:25.369782"}
+}
+
+# =============================================================
+# FUNCIONES AYUDA PARA CREAR EVENTOS MSK Y SQS
+# =============================================================
+
+def msk_record_from_payload(payload, offset=None):
+    """
+    Convierte un payload Python en el formato que MSK produce:
+    el valor 'value' debe venir en BASE64.
+    """
+    value = base64.b64encode(json.dumps(payload).encode()).decode()
+    rec = {"value": value}
+    if offset is not None:
+        rec["offset"] = offset
+    return rec
 
 
-# ============================================================
-# FIXTURE: parchear configuracion OpenFGA
-# ============================================================
+def make_msk_event(payloads_by_topic_partition):
+    """
+    Construye un evento MSK realista compuesto de varios topic-partition.
+    Ejemplo:
+    {
+        "miTopic-1": [p1, p2, p3],
+        "topic-2": [p4,p5]
+    }
+    """
+    records = {}
+    for tp, plist in payloads_by_topic_partition.items():
+        recs = []
+        base_off = 100  # offset inicial
+        for i, p in enumerate(plist):
+            recs.append(msk_record_from_payload(p, offset=base_off + i))
+        records[tp] = recs
+    return {"fuenteEvento": "aws:kafka", "records": records}
+
+
+def make_sqs_event_batch(list_of_payloads, retries_list=None):
+    """
+    Simula un evento SQS con múltiples Records,
+    cada uno con su contador de reintentos.
+    """
+    if retries_list is None:
+        retries_list = ["1"] * len(list_of_payloads)
+
+    records = []
+    for i, payload in enumerate(list_of_payloads):
+        # Formato real: una lista con la clave openfgaOperations
+        body = json.dumps({"openfgaOperations": [payload]})
+        records.append({
+            "fuenteEvento": "aws:sqs",
+            "messageId": f"id-{i+1}",
+            "body": body,
+            "attributes": {"ApproximateReceiveCount": retries_list[i]}
+        })
+    return {"Records": records}
+
+# =============================================================
+# SIMULADORES DE REDIS
+# =============================================================
+
+class DummyRedis:
+    """
+    Redis simple con un único comportamiento fijo.
+    """
+    def __init__(self, behavior):
+        self.behavior = behavior
+
+    def save_event(self, event, fuente, tipo):
+        result = self.behavior.get("save_event")
+        if isinstance(result, Exception):
+            raise result
+        return result
+
+
+class SharedDummyRedis:
+    """
+    Redis secuencial:
+    Cada llamada a save_event consume 1 valor de una lista.
+    """
+    def __init__(self, values):
+        self.values = list(values)
+
+    def save_event(self, event, fuente, tipo):
+        if not self.values:
+            return 1
+        v = self.values.pop(0)
+        if isinstance(v, Exception):
+            raise v
+        return v
+
+# =============================================================
+# FIXTURE GLOBAL patch_env
+# =============================================================
+# Este fixture se ejecuta AUTOMÁTICAMENTE en todos los tests.
+# Parchea:
+# - ServicioRedis         → para no usar Redis real
+# - obtener_evento_identificador → devuelve valores válidos
+# - procesar_evento       → Mock (evita procesar lógica real)
+# - enviar_registro...    → Mock (evita SQS real)
+# =============================================================
 
 @pytest.fixture(autouse=True)
-def patch_openfga_config(monkeypatch):
-    monkeypatch.setattr(
-        "services.cliente_servicio.obtener_configuracion_openfga",
-        lambda: {
-            "API_URL": "https://fake-fga",
-            "STORE_ID": "store123",
-            "MODEL_ID": "MODEL_X"
-        }
-    )
+def patch_env(monkeypatch):
+
+    def redis_accept_factory():
+        return DummyRedis({"save_event": 1})
+
+    # Redis simulado
+    monkeypatch.setattr(procesador_module, "ServicioRedis", lambda: redis_accept_factory())
+
+    # Identificador del evento simulado
+    monkeypatch.setattr(procesador_module, "obtener_evento_identificador",
+                        lambda ev: {"fuente": "TABLA1", "tipo": "AC"})
+
+    # procesar_evento → solo Mock
+    mocked_procesar_evento = Mock()
+    monkeypatch.setattr(procesador_module, "procesar_evento", mocked_procesar_evento)
+
+    # enviar_registro_a_reintento_o_dlq → Mock
+    mocked_retry_dlq = Mock()
+    monkeypatch.setattr(procesador_module, "enviar_registro_a_reintento_o_dlq", mocked_retry_dlq)
+
+    return {
+        "mocked_procesar_evento": mocked_procesar_evento,
+        "mocked_enviar_retry_dlq": mocked_retry_dlq,
+        "monkeypatch": monkeypatch
+    }
+
+# =============================================================
+# UTILIDAD: instalar Redis secuencial + lógica custom para procesar_evento
+# =============================================================
+
+def install_shared_redis_and_processor(monkeypatch, save_seq, procesar_side_effect=None):
+    """
+    Parchea Redis con SharedDummyRedis y opcionalmente modifica el comportamiento de procesar_evento.
+    """
+    shared = SharedDummyRedis(save_seq)
+    monkeypatch.setattr(procesador_module, "ServicioRedis", lambda: shared)
+
+    if procesar_side_effect is None:
+        monkeypatch.setattr(procesador_module, "procesar_evento", Mock())
+
+    elif isinstance(procesar_side_effect, Exception):
+        def raise_all(evt, f, t):
+            raise procesar_side_effect
+        monkeypatch.setattr(procesador_module, "procesar_evento", raise_all)
+
+    else:
+        monkeypatch.setattr(procesador_module, "procesar_evento", procesar_side_effect)
+
+    return shared
 
 
-# ============================================================
-# FIXTURE: request REALISTA DE EscribirTuplaPeticion
-# ============================================================
+# =============================================================
+# TESTS CLÁSICOS
+# =============================================================
 
-@pytest.fixture
-def fake_request():
-    tuple_key = TuplaLlave(
-        user={OpenFGATipo.USER.value: "userA"},
-        relation=OpenFGARelacion.USER_ADMIN_CI,
-        object={OpenFGATipo.PROFILE.value: "obj1"},
-    )
+def test_msk_success(patch_env):
+    """
+    Caso simple MSK: un solo registro exitoso.
+    """
+    event = make_msk_event({"miTopic-1": [BASE_EVENT]})
+    result = procesador_module.process_message(event)
 
-    req = EscribirTuplaPeticion(
-        tuple_key=tuple_key,
-        modelo_autorizacion_id="MODEL_X"
-    )
+    patch_env["mocked_procesar_evento"].assert_called_once()
+    patch_env["mocked_enviar_retry_dlq"].assert_not_called()
 
-    return req
+    assert result["itemsProcesados"] == 1
+    assert result["itemsFallidos"] == 0
 
-
-# ============================================================
-# WRITE TUPLE
-# ============================================================
-
-def test_write_tuple_ok(monkeypatch, fake_request):
-    fake_http = Mock()
-    fake_http.request.return_value = Mock(status=200)
-
-    monkeypatch.setattr(
-        "services.cliente_servicio.urllib3.PoolManager",
-        lambda timeout: fake_http
-    )
-
-    c = clienteServicio()
-    assert c.write_tuple(fake_request) is True
-
-
-def test_write_tuple_bad_status(monkeypatch, fake_request):
-    fake_http = Mock()
-    fake_http.request.return_value = Mock(status=500)
-
-    monkeypatch.setattr(
-        "services.cliente_servicio.urllib3.PoolManager",
-        lambda timeout: fake_http
-    )
-
-    c = clienteServicio()
-    assert c.write_tuple(fake_request) is False
-
-
-def test_write_tuple_exception(monkeypatch, fake_request):
-    fake_http = Mock()
-    fake_http.request.side_effect = Exception("NETWORK FAIL")
-
-    monkeypatch.setattr(
-        "services.cliente_servicio.urllib3.PoolManager",
-        lambda timeout: fake_http
-    )
-
-    c = clienteServicio()
-    with pytest.raises(OpenFGAError):
-        c.write_tuple(fake_request)
-
-
-# ============================================================
-# REMOVE TUPLE
-# ============================================================
-
-def test_remove_tuple_ok(monkeypatch, fake_request):
-    fake_http = Mock()
-    fake_http.request.return_value = Mock(status=200)
-
-    monkeypatch.setattr(
-        "services.cliente_servicio.urllib3.PoolManager",
-        lambda timeout: fake_http
-    )
-
-    c = clienteServicio()
-    assert c.remove_tuple(fake_request) is True
-
-
-def test_remove_tuple_bad_status(monkeypatch, fake_request):
-    fake_http = Mock()
-    fake_http.request.return_value = Mock(status=400)
-
-    monkeypatch.setattr(
-        "services.cliente_servicio.urllib3.PoolManager",
-        lambda timeout: fake_http
-    )
-
-    c = clienteServicio()
-    assert c.remove_tuple(fake_request) is False
-
-
-def test_remove_tuple_exception(monkeypatch, fake_request):
-    fake_http = Mock()
-    fake_http.request.side_effect = Exception("DELETE ERROR")
-
-    monkeypatch.setattr(
-        "services.cliente_servicio.urllib3.PoolManager",
-        lambda timeout: fake_http
-    )
-
-    c = clienteServicio()
-    with pytest.raises(OpenFGAError):
-        c.remove_tuple(fake_request)
-
-
-# ============================================================
-# CHECK TUPLE
-# ============================================================
-
-def test_comprobar_tupla_allowed_true(monkeypatch, fake_request):
-    fake_resp = Mock()
-    fake_resp.status = 200
-    fake_resp.json.return_value = {"allowed": True}
-
-    fake_http = Mock(request=Mock(return_value=fake_resp))
-    monkeypatch.setattr(
-        "services.cliente_servicio.urllib3.PoolManager",
-        lambda timeout: fake_http
-    )
-
-    c = clienteServicio()
-    assert c.comprobar_tupla(fake_request) is True
-
-
-def test_comprobar_tupla_allowed_false(monkeypatch, fake_request):
-    fake_resp = Mock()
-    fake_resp.status = 200
-    fake_resp.json.return_value = {"allowed": False}
-
-    fake_http = Mock(request=Mock(return_value=fake_resp))
-    monkeypatch.setattr(
-        "services.cliente_servicio.urllib3.PoolManager",
-        lambda timeout: fake_http
-    )
-
-    c = clienteServicio()
-    assert c.comprobar_tupla(fake_request) is False
-
-
-def test_comprobar_tupla_bad_status(monkeypatch, fake_request):
-    fake_resp = Mock(status=500)
-    fake_http = Mock(request=Mock(return_value=fake_resp))
-
-    monkeypatch.setattr(
-        "services.cliente_servicio.urllib3.PoolManager",
-        lambda timeout: fake_http
-    )
-
-    c = clienteServicio()
-    with pytest.raises(OpenFGAError):
-        c.comprobar_tupla(fake_request)
-
-
-def test_comprobar_tupla_exception(monkeypatch, fake_request):
-    fake_http = Mock()
-    fake_http.request.side_effect = Exception("CHECK ERROR")
-
-    monkeypatch.setattr(
-        "services.cliente_servicio.urllib3.PoolManager",
-        lambda timeout: fake_http
-    )
-
-    c = clienteServicio()
-    with pytest.raises(OpenFGAError):
-        c.comprobar_tupla(fake_request)
+# ... (TODOS LOS TESTS SIGUIENTES SE EXPLICAN IGUALAMENTE)
 ```
-
-
