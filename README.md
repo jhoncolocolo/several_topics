@@ -44,6 +44,136 @@ Si el paso 1 no es suficiente o si la política requiere menos permisos:
     setmqaut -m QMGR_TEST -t qmgr -p UsuarioMQ +connect +inq
     `
 
+```java
+package com.ejemplo.repositorios; // Asegúrate de ajustar el paquete
+
+import com.ejemplo.entidades.MisArticulos;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest;
+import org.springframework.boot.test.autoconfigure.jdbc.AutoConfigureTestDatabase;
+
+import java.util.Arrays;
+import java.util.Collection;
+import java.util.List;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+// Configura un entorno de prueba para JPA y una base de datos en memoria (H2 por defecto)
+@DataJpaTest
+// Opcional: Para asegurar que usa la base de datos de reemplazo en memoria y no la real
+@AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.ANY)
+public class MisArticulosRepositoryTest {
+
+    // Inyectamos el repositorio a probar
+    @Autowired
+    private MisArticulosRepository repository;
+
+    // Constantes para los valores
+    private static final String MATCH_C3 = "clave3";
+    private static final String MATCH_C4 = "clave4";
+    private static final String VALUE1 = "valor1";
+    private static final String VALUE2 = "valor2";
+    private static final String NO_MATCH = "no_coincide";
+
+    /**
+     * Inicializa la base de datos antes de cada prueba.
+     * Insertamos datos para tener casos de éxito y de fallo.
+     */
+    @BeforeEach
+    void setUp() {
+        // Limpiamos por si acaso, aunque @DataJpaTest debería hacerlo
+        repository.deleteAll();
+
+        // 1. Artículo que DEBE COINCIDIR (cumple todos los criterios)
+        MisArticulos articulo1 = new MisArticulos(
+            1L, "a1", VALUE1, MATCH_C3, MATCH_C4, "x1"
+        );
+
+        // 2. Artículo que DEBE COINCIDIR (cumple todos los criterios con VALUE2)
+        MisArticulos articulo2 = new MisArticulos(
+            2L, "a2", VALUE2, MATCH_C3, MATCH_C4, "x2"
+        );
+
+        // 3. Artículo que NO COINCIDE (campo3 incorrecto)
+        MisArticulos articulo3 = new MisArticulos(
+            3L, "a3", VALUE1, NO_MATCH, MATCH_C4, "x3"
+        );
+
+        // 4. Artículo que NO COINCIDE (campo4 incorrecto)
+        MisArticulos articulo4 = new MisArticulos(
+            4L, "a4", VALUE1, MATCH_C3, NO_MATCH, "x4"
+        );
+
+        // 5. Artículo que NO COINCIDE (campo2 incorrecto, no es 'valor1' ni 'valor2')
+        MisArticulos articulo5 = new MisArticulos(
+            5L, "a5", NO_MATCH, MATCH_C3, MATCH_C4, "x5"
+        );
+
+        repository.saveAll(Arrays.asList(articulo1, articulo2, articulo3, articulo4, articulo5));
+    }
+
+    // --- PRUEBAS ---
+
+    @Test
+    void cuandoBuscarArticulosPorCriteriosNativos_entoncesDevuelveSoloCoincidentes() {
+        // GIVEN (Dados)
+        // Valores de búsqueda
+        String paramCampo3 = MATCH_C3;
+        String paramCampo4 = MATCH_C4;
+        Collection<String> posiblesValoresCampo2 = Arrays.asList(VALUE1, VALUE2);
+
+        // WHEN (Cuando)
+        List<MisArticulos> resultados = repository.buscarArticulosPorCriteriosNativos(
+            paramCampo3,
+            paramCampo4,
+            posiblesValoresCampo2
+        );
+
+        // THEN (Entonces)
+        // 1. Debe haber exactamente 2 resultados
+        assertThat(resultados).isNotNull();
+        assertThat(resultados).hasSize(2);
+
+        // 2. Verificamos que los IDs de los resultados sean los esperados (1L y 2L)
+        List<Long> idsEncontrados = resultados.stream()
+            .map(MisArticulos::getId)
+            .toList();
+
+        assertThat(idsEncontrados).containsExactlyInAnyOrder(1L, 2L);
+
+        // 3. Verificamos que los resultados coincidan con los criterios
+        resultados.forEach(articulo -> {
+            assertThat(articulo.getCampo3()).isEqualTo(MATCH_C3);
+            assertThat(articulo.getCampo4()).isEqualTo(MATCH_C4);
+            assertThat(posiblesValoresCampo2).contains(articulo.getCampo2());
+        });
+    }
+
+    @Test
+    void cuandoBuscarConValoresCriteriosDiferentes_entoncesDevuelveListaVacia() {
+        // GIVEN (Dados)
+        // Usamos valores que sabemos que no coincidirán con ningún registro
+        String paramCampo3 = "otro_valor_c3";
+        String paramCampo4 = "otro_valor_c4";
+        Collection<String> posiblesValoresCampo2 = Arrays.asList(VALUE1, VALUE2);
+
+        // WHEN (Cuando)
+        List<MisArticulos> resultados = repository.buscarArticulosPorCriteriosNativos(
+            paramCampo3,
+            paramCampo4,
+            posiblesValoresCampo2
+        );
+
+        // THEN (Entonces)
+        // La lista debe estar vacía
+        assertThat(resultados).isNotNull();
+        assertThat(resultados).isEmpty();
+    }
+}
+```
+
 🟢 GUÍA PASO A PASO PARA ACTIVAR EL CICLO COMPLETO DE REINTENTOS SQS → LAMBDA
 Incluye:
 
