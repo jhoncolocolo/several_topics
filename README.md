@@ -451,7 +451,11 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.*;
 import org.springframework.web.reactive.function.client.WebClient;
+import org.springframework.web.util.UriBuilder;
 import reactor.core.publisher.Mono;
+
+import java.net.URI;
+import java.util.function.Function;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
@@ -462,10 +466,10 @@ class CyberArkClientTest {
     private WebClient webClient;
 
     @Mock
-    private WebClient.RequestHeadersUriSpec requestHeadersUriSpec;
+    private WebClient.RequestHeadersUriSpec<?> requestHeadersUriSpec;
 
     @Mock
-    private WebClient.RequestHeadersSpec requestHeadersSpec;
+    private WebClient.RequestHeadersSpec<?> requestHeadersSpec;
 
     @Mock
     private WebClient.ResponseSpec responseSpec;
@@ -478,9 +482,9 @@ class CyberArkClientTest {
         MockitoAnnotations.openMocks(this);
     }
 
-    // ==========================================
-    // TEST 1: Flujo normal (respuesta correcta)
-    // ==========================================
+    // ==========================
+    // TEST 1: Flujo normal
+    // ==========================
     @Test
     void testObtenerCredencial_retornaCredencialCorrecta() {
 
@@ -490,18 +494,14 @@ class CyberArkClientTest {
         setField(expected, "address", "10.10.10.1");
         setField(expected, "status", "OK");
 
-        // MOCK chain:
-
-        // 1) webClient.get()
+        // mock chain
         when(webClient.get()).thenReturn(requestHeadersUriSpec);
 
-        // 2) .uri(...)
-        when(requestHeadersUriSpec.uri(any())).thenReturn(requestHeadersSpec);
+        // Desambiguamos la sobrecarga indicando el tipo Function<UriBuilder,URI>
+        when(requestHeadersUriSpec.uri(Mockito.<Function<UriBuilder, URI>>any()))
+                .thenReturn(requestHeadersSpec);
 
-        // 3) .retrieve()
         when(requestHeadersSpec.retrieve()).thenReturn(responseSpec);
-
-        // 4) .bodyToMono()
         when(responseSpec.bodyToMono(CyberArkCredential.class)).thenReturn(Mono.just(expected));
 
         CyberArkCredential result = cyberArkClient.obtenerCredencial();
@@ -512,49 +512,57 @@ class CyberArkClientTest {
         assertEquals("10.10.10.1", readField(result, "address"));
         assertEquals("OK", readField(result, "status"));
 
-        // verifica que toda la cadena fue usada
+        // verificaciones (usando el matcher tipado nuevamente para uri)
         verify(webClient).get();
-        verify(requestHeadersUriSpec).uri(any());
+        verify(requestHeadersUriSpec).uri(Mockito.<Function<UriBuilder, URI>>any());
         verify(requestHeadersSpec).retrieve();
         verify(responseSpec).bodyToMono(CyberArkCredential.class);
     }
 
-    // ==========================================
-    // TEST 2: Cuando WebClient devuelve error
-    // ==========================================
+    // ==========================
+    // TEST 2: Cuando WebClient devuelve error (Mono.error)
+    // ==========================
     @Test
     void testObtenerCredencial_lanzaExcepcionCuandoWebClientFalla() {
 
         when(webClient.get()).thenReturn(requestHeadersUriSpec);
-        when(requestHeadersUriSpec.uri(any())).thenReturn(requestHeadersSpec);
+        when(requestHeadersUriSpec.uri(Mockito.<Function<UriBuilder, URI>>any())).thenReturn(requestHeadersSpec);
         when(requestHeadersSpec.retrieve()).thenReturn(responseSpec);
 
-        // Forzamos error
         when(responseSpec.bodyToMono(CyberArkCredential.class))
                 .thenReturn(Mono.error(new RuntimeException("Falla en servidor")));
 
         assertThrows(RuntimeException.class, () -> cyberArkClient.obtenerCredencial());
+
+        verify(webClient).get();
+        verify(requestHeadersUriSpec).uri(Mockito.<Function<UriBuilder, URI>>any());
+        verify(requestHeadersSpec).retrieve();
+        verify(responseSpec).bodyToMono(CyberArkCredential.class);
     }
 
-    // ==========================================
-    // Helpers para leer/escribir campos privados
-    // ==========================================
+    // ==========================
+    // Helpers para leer/escribir campos privados por reflexión
+    // ==========================
     private void setField(Object obj, String fieldName, Object value) {
         try {
             var f = obj.getClass().getDeclaredField(fieldName);
             f.setAccessible(true);
             f.set(obj, value);
-        } catch (Exception ignored) {}
+        } catch (Exception ignored) {
+        }
     }
 
-    private Object readField(Object obj, String fieldName) {
+    private String readField(Object obj, String fieldName) {
         try {
             var f = obj.getClass().getDeclaredField(fieldName);
             f.setAccessible(true);
-            return f.get(obj);
-        } catch (Exception ignored) {}
+            Object v = f.get(obj);
+            return v != null ? v.toString() : null;
+        } catch (Exception ignored) {
+        }
         return null;
     }
 }
+
 
 ```
