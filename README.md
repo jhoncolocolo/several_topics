@@ -112,166 +112,93 @@ class MisArticulosRepositoryTest {
     }
 }
 
-```
+```java
+ package com.ejemplo.service;
 
-🟢 GUÍA PASO A PASO PARA ACTIVAR EL CICLO COMPLETO DE REINTENTOS SQS → LAMBDA
-Incluye:
+import com.ejemplo.entidades.MisArticulos;
+import com.ejemplo.repositorios.MisArticulosRepository;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.mockito.Mockito;
 
-✔ Activar el trigger SQS en la Lambda
-✔ Ajustar permisos IAM
-✔ Verificar que la Lambda recibe reintentos
-✔ Probar manualmente con un mensaje fallido real
+import java.lang.reflect.Field;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.List;
 
-🟦 1. AGREGAR LA COLA SQS DE REINTENTOS COMO TRIGGER
-1️⃣ Entra a AWS Console
+import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.Mockito.*;
 
-👉 https://console.aws.amazon.com/lambda
+class MisArticulosServiceImplTest {
 
-2️⃣ Selecciona tu función Lambda
+    private MisArticulosRepository repo;
+    private MisArticulosServiceImpl service;
 
-Busca por nombre, ejemplo:
-lambda-msk-sqs-demo-processor
+    @BeforeEach
+    void setup() throws Exception {
+        repo = Mockito.mock(MisArticulosRepository.class);
+        service = new MisArticulosServiceImpl();
 
-3️⃣ Ve a la pestaña “Configuration”
-
-Luego selecciona Triggers.
-
-4️⃣ Click en “Add trigger”
-5️⃣ En la lista, selecciona → SQS
-
-Aquí te aparece un dropdown para elegir la cola.
-
-6️⃣ Selecciona tu cola de reintentos
-
-my-app-ret try-sqs
-
-O el nombre real que tengas.
-
-7️⃣ Batch size
-
-Déjalo en 1 (muy importante para tu código).
-
-8️⃣ Click en “Add”
-
-⚡ Ahora la Lambda procesará mensajes de tu cola Retry SQS.
-
-🟦 2. AGREGAR PERMISOS IAM PARA QUE LA LAMBDA LEA DESDE SQS
-
-Cuando agregas el trigger, AWS pone una policy para que SQS invoque la Lambda,
-pero NO pone permisos para que la Lambda pueda consumir SQS.
-
-Eso debes agregarlo tú.
-
-1️⃣ Ve a AWS Console → IAM
-
-👉 https://console.aws.amazon.com/iam
-
-2️⃣ Role de tu Lambda
-
-En tu Lambda, ve a:
-
-Configuration → Permissions → Execution role
-
-Dale click al role.
-
-3️⃣ En ese role → Add permissions → Inline policy
-4️⃣ Usa esta JSON policy:
-{
-    "Version": "2012-10-17",
-    "Statement": [
-        {
-            "Effect": "Allow",
-            "Action": [
-                "sqs:ReceiveMessage",
-                "sqs:DeleteMessage",
-                "sqs:GetQueueAttributes"
-            ],
-            "Resource": "arn:aws:sqs:REGION:ACCOUNT_ID:tu-cola-reintentos"
-        }
-    ]
-}
-
-¿Dónde saco estos valores?
-
-REGION → donde está tu SQS (ej: us-east-1)
-
-ACCOUNT_ID → tu ID de AWS (12 dígitos)
-
-tu-cola-reintentos → nombre exacto de la cola
-
-Puedes ver estos valores así:
-
-✦ En AWS Console → SQS → click en tu cola → “Details”
-
-Aparece:
-ARN: arn:aws:sqs:us-east-1:123456789012:my-app-retry-queue
-
-Ese ARN lo pegas en "Resource": ".....".
-
-🟦 3. CONFIRMAR QUE LA LAMBDA RECIBE MENSAJES DESDE SQS
-
-Para verificar que ya todo está conectado:
-
-Paso 1 — Entra a tu cola SQS Retry
-
-👉 SQS → selecciona la cola de reintentos
-
-Paso 2 — Click en Send and receive messages
-Paso 3 — En “Message body”, envía un JSON falso (simulación de tu código real)
-{
-  "openfgaOperations": [
-    {
-      "data_usr": {"string": "test"},
-      "data_num": {"string": "111"},
-      "data_tipo": {"string": "G"}
+        // Inyectar el repo mock mediante reflexión (porque es @Autowired)
+        Field field = MisArticulosServiceImpl.class.getDeclaredField("misArticulosRepository");
+        field.setAccessible(true);
+        field.set(service, repo);
     }
-  ]
+
+    @Test
+    void testBuscar_RetornaListaCorrecta() {
+        MisArticulos a1 = new MisArticulos();
+        MisArticulos a2 = new MisArticulos();
+
+        when(repo.buscarArticulosPorCriteriosNativos("A", "B"))
+                .thenReturn(Arrays.asList(a1, a2));
+
+        List<MisArticulos> result = service.buscar("A", "B");
+
+        assertNotNull(result);
+        assertEquals(2, result.size());
+
+        verify(repo, times(1)).buscarArticulosPorCriteriosNativos("A", "B");
+    }
+
+    @Test
+    void testBuscar_ListaVacia() {
+        when(repo.buscarArticulosPorCriteriosNativos("X", "Y"))
+                .thenReturn(Collections.emptyList());
+
+        List<MisArticulos> result = service.buscar("X", "Y");
+
+        assertNotNull(result);
+        assertTrue(result.isEmpty());
+
+        verify(repo).buscarArticulosPorCriteriosNativos("X", "Y");
+    }
+
+    @Test
+    void testBuscar_RetornaNull() {
+        when(repo.buscarArticulosPorCriteriosNativos("P", "Q"))
+                .thenReturn(null);
+
+        List<MisArticulos> result = service.buscar("P", "Q");
+
+        assertNull(result);
+
+        verify(repo).buscarArticulosPorCriteriosNativos("P", "Q");
+    }
+
+    @Test
+    void testInyeccionDeRepositorioPorReflexion() throws Exception {
+        // Verificar que el repo mock realmente se inyectó
+        Field field = MisArticulosServiceImpl.class.getDeclaredField("misArticulosRepository");
+        field.setAccessible(true);
+
+        Object injectedRepo = field.get(service);
+
+        assertNotNull(injectedRepo);
+        assertSame(repo, injectedRepo);
+    }
 }
 
-Paso 4 — Click: Send message
-Paso 5 — Ve a tu Lambda → “Monitor” → “Logs”
-
-Debe aparecer una ejecución nueva procesando ese mensaje.
-
-Si ves algo como:
-
-INFO processing SQS message id-1
-
-
-✔ La Lambda ya recibe reintentos desde SQS correctamente.
-
-🟦 4. PROBAR EL FLUJO COMPLETO CON UN EVENTO FALLIDO
-
-Ahora haremos una prueba real:
-
-Prueba simulando error (que envía mensaje a Retry SQS)
-
-Ve a MSK y envía un mensaje malo (o usa la consola de prueba de Lambda)
-
-La Lambda fallará
-
-En tus logs deberías ver:
-
-Sending record to retry queue...
-
-
-Ve a tu cola Retry
-→ verás el mensaje entrar
-
-En unos segundos
-→ Lambda lo vuelve a procesar
-
-Si vuelve a fallar
-→ El mensaje entra otra vez a Retry
-
-Después de X reintentos
-→ Tu código decide enviarlo a la DLQ
-
-🟢 ¿Quieres que te haga ahora un DIAGRAMA resumido de toda tu arquitectura funcionando MSK + LAMBDA + RETRY + DLQ?
-
-Formato ASCII o tipo diagramita “bonito”.
-
-Solo dime: "Sí, dame el diagrama".
 
 ```python
 # tests/test_procesador.py
