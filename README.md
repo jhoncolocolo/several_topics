@@ -446,82 +446,48 @@ def test_msk_success(patch_env):
 ```
  package examples.configuracion;
 
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.springframework.mock.web.MockHttpServletRequest;
-import org.springframework.mock.web.MockHttpServletResponse;
-import org.springframework.mock.web.MockFilterChain;
-import org.springframework.security.config.annotation.web.builders.HttpSecurity;
-import org.springframework.security.test.util.TestSecurityContextHolder;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.test.web.servlet.MockMvc;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+@SpringBootTest
+@AutoConfigureMockMvc
 class SecurityConfigTest {
 
-    private SecurityConfig config;
-    private HttpSecurity http;
+    @Autowired
+    private SecurityFilterChain securityFilterChain;
 
-    @BeforeEach
-    void setup() {
-        config = new SecurityConfig();
-        http = new HttpSecurity(null, null, null, null, null, null);
-        // Spring Security 6 NO usa más ObjectPostProcessor
+    @Autowired
+    private MockMvc mockMvc;
+
+    @Test
+    void securityFilterChainLoadsCorrectly() {
+        assertThat(securityFilterChain).isNotNull();
     }
 
     @Test
-    void testSecurityFilterChainBuildsSuccessfully() throws Exception {
-        SecurityFilterChain filterChain = config.securityFilterChain(http);
-
-        assertThat(filterChain).isNotNull();
+    void apiEndpointsArePermitted() throws Exception {
+        mockMvc.perform(get("/api/test"))
+                .andExpect(status().isOk());
     }
 
     @Test
-    void testApiRequestsArePermitted() throws Exception {
-        SecurityFilterChain filterChain = config.securityFilterChain(http);
-
-        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/test");
-        MockHttpServletResponse response = new MockHttpServletResponse();
-        MockFilterChain chain = new MockFilterChain();
-
-        filterChain.doFilter(request, response, chain);
-
-        // Como todo está permitido → no hay redirecciones ni bloqueos
-        assertThat(response.getStatus()).isEqualTo(200);
+    void errorEndpointIsPermitted() throws Exception {
+        mockMvc.perform(get("/error"))
+                .andExpect(status().isOk());
     }
 
     @Test
-    void testNonApiRequestsArePermitted() throws Exception {
-        SecurityFilterChain filterChain = config.securityFilterChain(http);
-
-        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/otro/recurso");
-        MockHttpServletResponse response = new MockHttpServletResponse();
-        MockFilterChain chain = new MockFilterChain();
-
-        filterChain.doFilter(request, response, chain);
-
-        assertThat(response.getStatus()).isEqualTo(200);
-    }
-
-    @Test
-    void testCsrfIsDisabled() throws Exception {
-        config.securityFilterChain(http);
-
-        assertThat(http.getSharedObjects().containsKey("org.springframework.security.config.annotation.web.configurers.CsrfConfigurer")).isFalse();
-    }
-
-    @Test
-    void testFormLoginDisabled() throws Exception {
-        config.securityFilterChain(http);
-
-        assertThat(http.getSharedObjects().containsKey("org.springframework.security.config.annotation.web.configurers.FormLoginConfigurer")).isFalse();
-    }
-
-    @Test
-    void testLogoutDisabled() throws Exception {
-        config.securityFilterChain(http);
-
-        assertThat(http.getSharedObjects().containsKey("org.springframework.security.config.annotation.web.configurers.LogoutConfigurer")).isFalse();
+    void anyOtherRequestIsPermitted() throws Exception {
+        mockMvc.perform(get("/cualquier/cosa"))
+                .andExpect(status().isOk());
     }
 }
 
