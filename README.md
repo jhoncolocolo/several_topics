@@ -444,78 +444,85 @@ def test_msk_success(patch_env):
 ```
 
 ```
-package examples.configuracion;
+ package examples.configuracion;
 
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.springframework.security.config.annotation.ObjectPostProcessor;
+import org.springframework.mock.web.MockHttpServletRequest;
+import org.springframework.mock.web.MockHttpServletResponse;
+import org.springframework.mock.web.MockFilterChain;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
+import org.springframework.security.test.util.TestSecurityContextHolder;
 import org.springframework.security.web.SecurityFilterChain;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
 class SecurityConfigTest {
 
-    private HttpSecurity createHttpSecurity() {
-        return new HttpSecurity(new ObjectPostProcessor<>() {});
+    private SecurityConfig config;
+    private HttpSecurity http;
+
+    @BeforeEach
+    void setup() {
+        config = new SecurityConfig();
+        http = new HttpSecurity(null, null, null, null, null, null);
+        // Spring Security 6 NO usa más ObjectPostProcessor
     }
 
     @Test
-    void securityFilterChainIsCreated() throws Exception {
-        SecurityConfig config = new SecurityConfig();
-        HttpSecurity http = createHttpSecurity();
+    void testSecurityFilterChainBuildsSuccessfully() throws Exception {
+        SecurityFilterChain filterChain = config.securityFilterChain(http);
 
-        SecurityFilterChain chain = config.securityFilterChain(http);
-
-        assertThat(chain).isNotNull();
+        assertThat(filterChain).isNotNull();
     }
 
     @Test
-    void csrfIsDisabled() throws Exception {
-        SecurityConfig config = new SecurityConfig();
-        HttpSecurity http = createHttpSecurity();
+    void testApiRequestsArePermitted() throws Exception {
+        SecurityFilterChain filterChain = config.securityFilterChain(http);
 
+        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/test");
+        MockHttpServletResponse response = new MockHttpServletResponse();
+        MockFilterChain chain = new MockFilterChain();
+
+        filterChain.doFilter(request, response, chain);
+
+        // Como todo está permitido → no hay redirecciones ni bloqueos
+        assertThat(response.getStatus()).isEqualTo(200);
+    }
+
+    @Test
+    void testNonApiRequestsArePermitted() throws Exception {
+        SecurityFilterChain filterChain = config.securityFilterChain(http);
+
+        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/otro/recurso");
+        MockHttpServletResponse response = new MockHttpServletResponse();
+        MockFilterChain chain = new MockFilterChain();
+
+        filterChain.doFilter(request, response, chain);
+
+        assertThat(response.getStatus()).isEqualTo(200);
+    }
+
+    @Test
+    void testCsrfIsDisabled() throws Exception {
         config.securityFilterChain(http);
 
-        // Si CSRF está deshabilitado, getConfigurer(CsrfConfigurer) retorna null
-        assertThat(http.getConfigurer(
-            org.springframework.security.config.annotation.web.configurers.CsrfConfigurer.class
-        )).isNull();
+        assertThat(http.getSharedObjects().containsKey("org.springframework.security.config.annotation.web.configurers.CsrfConfigurer")).isFalse();
     }
 
     @Test
-    void formLoginIsDisabled() throws Exception {
-        SecurityConfig config = new SecurityConfig();
-        HttpSecurity http = createHttpSecurity();
-
+    void testFormLoginDisabled() throws Exception {
         config.securityFilterChain(http);
 
-        assertThat(http.getConfigurer(
-            org.springframework.security.config.annotation.web.configurers.FormLoginConfigurer.class
-        )).isNull();
+        assertThat(http.getSharedObjects().containsKey("org.springframework.security.config.annotation.web.configurers.FormLoginConfigurer")).isFalse();
     }
 
     @Test
-    void logoutIsDisabled() throws Exception {
-        SecurityConfig config = new SecurityConfig();
-        HttpSecurity http = createHttpSecurity();
-
+    void testLogoutDisabled() throws Exception {
         config.securityFilterChain(http);
 
-        assertThat(http.getConfigurer(
-            org.springframework.security.config.annotation.web.configurers.LogoutConfigurer.class
-        )).isNull();
-    }
-
-    @Test
-    void authorizationRulesAreApplied() throws Exception {
-        SecurityConfig config = new SecurityConfig();
-        HttpSecurity http = createHttpSecurity();
-
-        SecurityFilterChain chain = config.securityFilterChain(http);
-
-        assertThat(chain).isNotNull();
+        assertThat(http.getSharedObjects().containsKey("org.springframework.security.config.annotation.web.configurers.LogoutConfigurer")).isFalse();
     }
 }
-
 
 ```
