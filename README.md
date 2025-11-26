@@ -448,6 +448,8 @@ package examples.configuracion;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.autoconfigure.AutoConfigurations;
+import org.springframework.boot.autoconfigure.security.servlet.SecurityAutoConfiguration;
+import org.springframework.boot.autoconfigure.security.servlet.UserDetailsServiceAutoConfiguration;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 import org.springframework.security.web.SecurityFilterChain;
 
@@ -457,9 +459,12 @@ class SecurityConfigTest {
 
     private final ApplicationContextRunner runner =
             new ApplicationContextRunner()
-                    // 🔥 IMPORTANTE: deshabilita toda la autoconfiguración de Spring Boot
-                    .withConfiguration(AutoConfigurations.of())
-                    // 🔥 Carga únicamente tu configuración de seguridad
+                    .withConfiguration(
+                            AutoConfigurations.of(
+                                    SecurityAutoConfiguration.class,            // 🔥 crea HttpSecurity
+                                    UserDetailsServiceAutoConfiguration.class   // 🔥 evita errores de users
+                            )
+                    )
                     .withUserConfiguration(SecurityConfig.class);
 
     @Test
@@ -477,6 +482,5 @@ class SecurityConfigTest {
         });
     }
 }
-
 
 ```
