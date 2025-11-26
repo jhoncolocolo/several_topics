@@ -447,6 +447,7 @@ def test_msk_success(patch_env):
 package examples.configuracion;
 
 import org.junit.jupiter.api.Test;
+import org.springframework.boot.autoconfigure.AutoConfigurations;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 import org.springframework.security.web.SecurityFilterChain;
 
@@ -456,6 +457,9 @@ class SecurityConfigTest {
 
     private final ApplicationContextRunner runner =
             new ApplicationContextRunner()
+                    // 🔥 IMPORTANTE: deshabilita toda la autoconfiguración de Spring Boot
+                    .withConfiguration(AutoConfigurations.of())
+                    // 🔥 Carga únicamente tu configuración de seguridad
                     .withUserConfiguration(SecurityConfig.class);
 
     @Test
@@ -467,11 +471,12 @@ class SecurityConfigTest {
     }
 
     @Test
-    void contextLoadsWithoutErrors() {
+    void contextStartsSuccessfully() {
         runner.run(context -> {
             assertThat(context.isRunning()).isTrue();
         });
     }
 }
+
 
 ```
