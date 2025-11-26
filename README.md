@@ -447,8 +447,6 @@ def test_msk_success(patch_env):
 package examples.configuracion;
 
 import org.junit.jupiter.api.Test;
-import org.springframework.boot.autoconfigure.ImportAutoConfiguration;
-import org.springframework.boot.autoconfigure.security.servlet.SecurityAutoConfiguration;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 import org.springframework.security.web.SecurityFilterChain;
 
@@ -456,28 +454,22 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 class SecurityConfigTest {
 
-    private final ApplicationContextRunner contextRunner =
+    private final ApplicationContextRunner runner =
             new ApplicationContextRunner()
-                    .withUserConfiguration(SecurityConfig.class)
-                    .withConfiguration(
-                            ImportAutoConfiguration.class
-                    )
-                    // activa autoconfiguración básica de seguridad
-                    .withPropertyValues("spring.autoconfigure.exclude=");
+                    .withUserConfiguration(SecurityConfig.class);
 
     @Test
-    void securityFilterChainBeanLoadsCorrectly() {
-        contextRunner.run(context -> {
+    void securityFilterChainBeanExists() {
+        runner.run(context -> {
             assertThat(context).hasSingleBean(SecurityFilterChain.class);
-            SecurityFilterChain chain = context.getBean(SecurityFilterChain.class);
-            assertThat(chain).isNotNull();
+            assertThat(context.getBean(SecurityFilterChain.class)).isNotNull();
         });
     }
 
     @Test
-    void contextLoadsSecurityConfigWithoutErrors() {
-        contextRunner.run(context -> {
-            assertThat(context).hasSingleBean(SecurityFilterChain.class);
+    void contextLoadsWithoutErrors() {
+        runner.run(context -> {
+            assertThat(context.isRunning()).isTrue();
         });
     }
 }
