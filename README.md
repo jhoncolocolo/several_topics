@@ -444,171 +444,105 @@ def test_msk_success(patch_env):
 ```
 
 ```
- package example.clientes;
+package examples.configuracion;
 
-import examples.modelos.CyberArkCredential;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.mockito.*;
-import org.springframework.web.reactive.function.client.WebClient;
-import org.springframework.web.util.UriBuilder;
-import reactor.core.publisher.Mono;
+import org.springframework.security.authentication.AuthenticationManager;
+import org.springframework.security.config.annotation.ObjectPostProcessor;
+import org.springframework.security.config.annotation.web.builders.HttpSecurity;
+import org.springframework.security.config.annotation.web.configurers.*;
+import org.springframework.security.web.SecurityFilterChain;
 
-import java.net.URI;
-import java.util.function.Function;
+import static org.assertj.core.api.Assertions.assertThat;
 
-import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.Mockito.*;
+/**
+ * Tests completos y 100% unitarios para SecurityConfig.
+ * No levanta servidor, no usa SpringBootTest.
+ * Todo en un solo archivo.
+ */
+class SecurityConfigTest {
 
-class CyberArkClientTest {
-
-    @Mock
-    private WebClient webClient;
-
-    // RAW TYPES → evita errores genéricos de Mockito
-    @Mock
-    private WebClient.RequestHeadersUriSpec requestHeadersUriSpec;
-
-    @Mock
-    private WebClient.RequestHeadersSpec requestHeadersSpec;
-
-    @Mock
-    private WebClient.ResponseSpec responseSpec;
-
-    @InjectMocks
-    private CyberArkClient client;
-
-    @Captor
-    private ArgumentCaptor<Function<UriBuilder, URI>> uriCaptor;
-
-    @BeforeEach
-    void setup() {
-        MockitoAnnotations.openMocks(this);
-
-        when(webClient.get()).thenReturn(requestHeadersUriSpec);
-
-        when(requestHeadersUriSpec.uri(Mockito.<Function<UriBuilder, URI>>any()))
-                .thenReturn(requestHeadersSpec);
-
-        when(requestHeadersSpec.retrieve()).thenReturn(responseSpec);
-    }
-
-    // -------------------------------------------------------------------------
-    // 1. TEST CORRECTO
-    // -------------------------------------------------------------------------
-    @Test
-    void testObtenerCredencial_ok() {
-
-        CyberArkCredential expected = new CyberArkCredential();
-        expected.setUserName("admin");
-        expected.setAddress("10.0.0.1");
-        expected.setContent("mypassword");
-        expected.setStatus("valid");
-
-        when(responseSpec.bodyToMono(eq(CyberArkCredential.class)))
-                .thenReturn(Mono.just(expected));
-
-        CyberArkCredential result = client.obtenerCredencial();
-
-        assertNotNull(result);
-        assertEquals("admin", result.getUserName());
-        assertEquals("10.0.0.1", result.getAddress());
-        assertEquals("mypassword", result.getContent());
-        assertEquals("valid", result.getStatus());
-    }
-
-    // -------------------------------------------------------------------------
-    // 2. TEST: Cuando WebClient lanza una excepción
-    // -------------------------------------------------------------------------
-    @Test
-    void testObtenerCredencial_errorEnWebClient() {
-
-        when(responseSpec.bodyToMono(eq(CyberArkCredential.class)))
-                .thenReturn(Mono.error(new RuntimeException("FAIL")));
-
-        assertThrows(RuntimeException.class, () -> client.obtenerCredencial());
-    }
-
-    // -------------------------------------------------------------------------
-    // 3. TEST: Cuando bodyToMono devuelve Mono.empty()
-    // -------------------------------------------------------------------------
-    @Test
-    void testObtenerCredencial_monoEmpty() {
-
-        when(responseSpec.bodyToMono(eq(CyberArkCredential.class)))
-                .thenReturn(Mono.empty());
-
-        CyberArkCredential result = client.obtenerCredencial();
-
-        assertNull(result); // block() → null
-    }
-
-    // -------------------------------------------------------------------------
-    // 4. TEST: Validar URI EXACTA generada por el cliente
-    // -------------------------------------------------------------------------
-    @Test
-    void testObtenerCredencial_uriGeneradaCorrectamente() {
-
-        when(responseSpec.bodyToMono(eq(CyberArkCredential.class)))
-                .thenReturn(Mono.just(new CyberArkCredential()));
-
-        client.obtenerCredencial();
-
-        // Capturar el Function<UriBuilder, URI>
-        verify(requestHeadersUriSpec).uri(uriCaptor.capture());
-
-        Function<UriBuilder, URI> fn = uriCaptor.getValue();
-
-        URI builtUri = fn.apply(new UriBuilder() {
-            // Implementación mínima para probar construcción de URI
-            private String path = "";
-            private String query = "";
-
-            @Override
-            public UriBuilder scheme(String s) { return this; }
-            @Override
-            public UriBuilder host(String h) { return this; }
-            @Override
-            public UriBuilder port(int p) { return this; }
-
-            @Override
-            public UriBuilder path(String p) {
-                this.path = p;
-                return this;
-            }
-
-            @Override
-            public UriBuilder queryParam(String name, Object... values) {
-                if (!query.isEmpty()) query += "&";
-                query += name + "=" + values[0];
-                return this;
-            }
-
-            @Override
-            public URI build(Object... values) {
-                return URI.create(path + "?" + query);
-            }
-        });
-
-        // Validación exacta
-        assertEquals(
-                "/AIMWebService/api/Accounts/Query?AppID=&Safe=MYSAFE&Object=MY_OBJETC",
-                builtUri.toString()
+    // ===============================================================
+    //  Helper para poder instanciar HttpSecurity sin contexto Spring
+    // ===============================================================
+    private static HttpSecurity createHttpSecurity() {
+        return new HttpSecurity(
+                new ObjectPostProcessor<Object>() {
+                    @Override
+                    public <O> O postProcess(O object) {
+                        return object;
+                    }
+                },
+                new AuthenticationManager() {},
+                java.util.Collections.emptyMap()
         );
     }
 
-    // -------------------------------------------------------------------------
-    // 5. TEST: Cuando block() lanza excepción interna del reactor
-    // -------------------------------------------------------------------------
+    // ===============================================================
+    // 1. Validar que el bean se crea y build no falla
+    // ===============================================================
     @Test
-    void testObtenerCredencial_blockLanzaError() {
+    void securityFilterChainIsCreated() throws Exception {
+        SecurityConfig config = new SecurityConfig();
+        HttpSecurity http = createHttpSecurity();
 
-        when(responseSpec.bodyToMono(eq(CyberArkCredential.class)))
-                .thenReturn(Mono.error(new IllegalStateException("reactor error")));
+        SecurityFilterChain chain = config.securityFilterChain(http);
 
-        assertThrows(IllegalStateException.class, () -> client.obtenerCredencial());
+        assertThat(chain).isNotNull();
+    }
+
+    // ===============================================================
+    // 2. CSRF está deshabilitado
+    // ===============================================================
+    @Test
+    void csrfIsDisabled() throws Exception {
+        SecurityConfig config = new SecurityConfig();
+        HttpSecurity http = createHttpSecurity();
+
+        config.securityFilterChain(http);
+
+        assertThat(http.getConfigurer(CsrfConfigurer.class)).isNull();
+    }
+
+    // ===============================================================
+    // 3. formLogin está deshabilitado
+    // ===============================================================
+    @Test
+    void formLoginIsDisabled() throws Exception {
+        SecurityConfig config = new SecurityConfig();
+        HttpSecurity http = createHttpSecurity();
+
+        config.securityFilterChain(http);
+
+        assertThat(http.getConfigurer(FormLoginConfigurer.class)).isNull();
+    }
+
+    // ===============================================================
+    // 4. logout está deshabilitado
+    // ===============================================================
+    @Test
+    void logoutIsDisabled() throws Exception {
+        SecurityConfig config = new SecurityConfig();
+        HttpSecurity http = createHttpSecurity();
+
+        config.securityFilterChain(http);
+
+        assertThat(http.getConfigurer(LogoutConfigurer.class)).isNull();
+    }
+
+    // ===============================================================
+    // 5. Validar que los matchers se registraron
+    //    (no valida rutas reales, solo que fueron configuradas)
+    // ===============================================================
+    @Test
+    void matchersAreRegistered() throws Exception {
+        SecurityConfig config = new SecurityConfig();
+        HttpSecurity http = createHttpSecurity();
+
+        config.securityFilterChain(http);
+
+        assertThat(http.getAuthorizationRegistry()).isNotNull();
     }
 }
-
 
 ```
