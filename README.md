@@ -46,29 +46,76 @@ Si el paso 1 no es suficiente o si la política requiere menos permisos:
 ```java
 package examples.configuracion;
 
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.springframework.core.io.ByteArrayResource;
+import org.mockito.Mockito;
+import org.springframework.core.io.Resource;
 import org.springframework.web.reactive.function.client.WebClient;
 
+import java.io.ByteArrayInputStream;
+import java.io.InputStream;
+import java.security.KeyStore;
+
 import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.Mockito.*;
 
 class WebClientConfigTest {
 
+    private Resource keystoreMock;
+    private WebClientConfig config;
+
+    @BeforeEach
+    void setup() throws Exception {
+
+        // Mock del recurso keystore
+        keystoreMock = mock(Resource.class);
+
+        // Creamos un KeyStore vacío pero válido
+        KeyStore ks = KeyStore.getInstance("JKS");
+        ks.load(null, "123456".toCharArray());
+
+        // Guardamos el KeyStore a bytes
+        var baos = new java.io.ByteArrayOutputStream();
+        ks.store(baos, "123456".toCharArray());
+        byte[] keystoreBytes = baos.toByteArray();
+
+        // Simulamos que el Resource devuelve ese InputStream
+        InputStream is = new ByteArrayInputStream(keystoreBytes);
+        when(keystoreMock.getInputStream()).thenReturn(is);
+
+        // Instanciamos la config REAL con constructor
+        config = new WebClientConfig(keystoreMock, "123456");
+    }
+
     @Test
-    void webClientBeanLoadsSuccessfully() throws Exception {
-
-        byte[] fakeKeystoreBytes = "FAKEKEYSTORE".getBytes();
-        ByteArrayResource resource = new ByteArrayResource(fakeKeystoreBytes);
-
-        WebClientConfig config = new WebClientConfig(resource, "mypassword");
+    void testWebClientCreation() throws Exception {
 
         WebClient client = config.webClient();
 
-        assertNotNull(client);
-        assertNotNull(client.mutate());
+        assertNotNull(client, "El WebClient no debe ser null");
 
-        // validar base url
-        assertEquals("https://midomain.com", client.mutate().build().baseUrl());
+        // validamos que la baseUrl quedó configurada
+        WebClient.Builder builder = WebClient.builder().baseUrl("https://midomain.com");
+        assertEquals("https://midomain.com",
+                client.mutate().build().toString().contains("midomain.com") ? "https://midomain.com" : null
+        );
+
+        // Verificamos que el keystore fue leído
+        verify(keystoreMock, times(1)).getInputStream();
+    }
+
+    @Test
+    void testWebClientThrowsExceptionOnInvalidKeystore() throws Exception {
+
+        // Forzamos que el InputStream lance error
+        Resource badResource = mock(Resource.class);
+        when(badResource.getInputStream()).thenThrow(new RuntimeException("IO error"));
+
+        WebClientConfig badConfig = new WebClientConfig(badResource, "123456");
+
+        Exception ex = assertThrows(Exception.class, badConfig::webClient);
+
+        assertTrue(ex.getMessage().contains("IO"), "Debe fallar por error de lectura");
     }
 }
 
