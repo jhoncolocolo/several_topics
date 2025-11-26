@@ -43,3 +43,83 @@ Si el paso 1 no es suficiente o si la política requiere menos permisos:
     ```bash
     setmqaut -m QMGR_TEST -t qmgr -p UsuarioMQ +connect +inq
     `
+```python
+package examples.configuracion;
+
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.mockito.Mockito;
+import org.springframework.core.io.Resource;
+import org.springframework.test.util.ReflectionTestUtils;
+import org.springframework.web.reactive.function.client.WebClient;
+
+import java.io.ByteArrayInputStream;
+import java.io.InputStream;
+import java.security.KeyStore;
+
+import javax.net.ssl.KeyManagerFactory;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.*;
+
+class WebClientConfigTest {
+
+    private WebClientConfig config;
+
+    private Resource keystoreMock;
+
+    private InputStream inputStreamMock;
+
+    @BeforeEach
+    void setUp() throws Exception {
+        config = new WebClientConfig();
+
+        // Mock del Resource
+        keystoreMock = mock(Resource.class);
+
+        // Mock del InputStream (contenido simulado del keystore)
+        inputStreamMock = new ByteArrayInputStream(new byte[]{1, 2, 3});
+
+        // Inyectar valores simulados a las @Value
+        ReflectionTestUtils.setField(config, "keystore", keystoreMock);
+        ReflectionTestUtils.setField(config, "keystorePassword", "123456");
+
+        // Simular que load() no falle
+        when(keystoreMock.getInputStream()).thenReturn(inputStreamMock);
+
+        // Mock parcial del KeyStore estático
+        KeyStore ks = KeyStore.getInstance(KeyStore.getDefaultType());
+        ReflectionTestUtils.invokeMethod(ks, "load", (InputStream) null, "123456".toCharArray());
+
+        // 🔥 MOCK estático: evitar que Spring cargue un keystore real
+        Mockito.mockStatic(KeyStore.class).when(() -> KeyStore.getInstance("MYINSTANCE")).thenReturn(ks);
+
+        // MOCK de KeyManagerFactory
+        KeyManagerFactory kmf = KeyManagerFactory.getInstance(KeyManagerFactory.getDefaultAlgorithm());
+        kmf.init(ks, "123456".toCharArray());
+        Mockito.mockStatic(KeyManagerFactory.class)
+                .when(() -> KeyManagerFactory.getInstance(KeyManagerFactory.getDefaultAlgorithm()))
+                .thenReturn(kmf);
+    }
+
+    @Test
+    void testWebClientBeanCreation() throws Exception {
+        WebClient webClient = config.webClient();
+
+        assertThat(webClient).isNotNull();
+        assertThat(webClient).isInstanceOf(WebClient.class);
+
+        // Verificar que se llamó getInputStream()
+        verify(keystoreMock, times(1)).getInputStream();
+    }
+
+    @Test
+    void testWebClientHasBaseUrl() throws Exception {
+        WebClient webClient = config.webClient();
+
+        String baseUrl = (String) ReflectionTestUtils.getField(webClient, "baseUrl");
+        assertThat(baseUrl).isEqualTo("https://midomain.com");
+    }
+}
+
+```
