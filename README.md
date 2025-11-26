@@ -46,34 +46,31 @@ Si el paso 1 no es suficiente o si la política requiere menos permisos:
 ```java
 package examples.configuracion;
 
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 import org.springframework.core.io.ByteArrayResource;
 import org.springframework.web.reactive.function.client.WebClient;
-import org.springframework.test.util.ReflectionTestUtils;
 
-public class WebClientConfigTest {
+import static org.junit.jupiter.api.Assertions.*;
 
-    private WebClientConfig config;
-
-    @Before
-    public void setup() {
-        config = new WebClientConfig();
-
-        // contenido falso para el keystore (lo que sea en bytes)
-        byte[] fakeKeystoreBytes = "FAKE_KEYSTORE".getBytes();
-        ByteArrayResource fakeResource = new ByteArrayResource(fakeKeystoreBytes);
-
-        // inyectar campos privados @Value
-        ReflectionTestUtils.setField(config, "keystore", fakeResource);
-        ReflectionTestUtils.setField(config, "keystorePassword", "mypassword");
-    }
+class WebClientConfigTest {
 
     @Test
-    public void testWebClientBeanLoadsSuccessfully() throws Exception {
+    void webClientBeanLoadsSuccessfully() throws Exception {
+
+        byte[] fakeKeystoreBytes = "FAKEKEYSTORE".getBytes();
+        ByteArrayResource resource = new ByteArrayResource(fakeKeystoreBytes);
+
+        WebClientConfig config = new WebClientConfig(resource, "mypassword");
+
         WebClient client = config.webClient();
-        assert client != null;
+
+        assertNotNull(client);
+        assertNotNull(client.mutate());
+
+        // validar base url
+        assertEquals("https://midomain.com", client.mutate().build().baseUrl());
     }
 }
+
 
 ```
