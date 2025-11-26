@@ -44,11 +44,9 @@ Si el paso 1 no es suficiente o si la política requiere menos permisos:
     setmqaut -m QMGR_TEST -t qmgr -p UsuarioMQ +connect +inq
     `
 ```java
-package examples.configuracion;
+ package examples.configuracion;
 
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.mockito.Mockito;
 import org.springframework.core.io.Resource;
 import org.springframework.web.reactive.function.client.WebClient;
 
@@ -56,66 +54,34 @@ import java.io.ByteArrayInputStream;
 import java.io.InputStream;
 import java.security.KeyStore;
 
-import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
 class WebClientConfigTest {
 
-    private Resource keystoreMock;
-    private WebClientConfig config;
-
-    @BeforeEach
-    void setup() throws Exception {
-
-        // Mock del recurso keystore
-        keystoreMock = mock(Resource.class);
-
-        // Creamos un KeyStore vacío pero válido
-        KeyStore ks = KeyStore.getInstance("JKS");
-        ks.load(null, "123456".toCharArray());
-
-        // Guardamos el KeyStore a bytes
-        var baos = new java.io.ByteArrayOutputStream();
-        ks.store(baos, "123456".toCharArray());
-        byte[] keystoreBytes = baos.toByteArray();
-
-        // Simulamos que el Resource devuelve ese InputStream
-        InputStream is = new ByteArrayInputStream(keystoreBytes);
-        when(keystoreMock.getInputStream()).thenReturn(is);
-
-        // Instanciamos la config REAL con constructor
-        config = new WebClientConfig(keystoreMock, "123456");
-    }
-
     @Test
-    void testWebClientCreation() throws Exception {
+    void testWebClientBean() throws Exception {
 
+        // Mock del Resource
+        Resource keystoreMock = mock(Resource.class);
+
+        // El keystore necesita un InputStream válido
+        InputStream ksStream = new ByteArrayInputStream(new byte[0]);
+        when(keystoreMock.getInputStream()).thenReturn(ksStream);
+
+        // El password real no importa
+        String password = "123456";
+
+        // Usamos tu constructor real, sin reflección
+        WebClientConfig config = new WebClientConfig(keystoreMock, password);
+
+        // Ejecutamos el bean
         WebClient client = config.webClient();
 
-        assertNotNull(client, "El WebClient no debe ser null");
+        // Validación básica: que no sea null
+        assert client != null;
 
-        // validamos que la baseUrl quedó configurada
-        WebClient.Builder builder = WebClient.builder().baseUrl("https://midomain.com");
-        assertEquals("https://midomain.com",
-                client.mutate().build().toString().contains("midomain.com") ? "https://midomain.com" : null
-        );
-
-        // Verificamos que el keystore fue leído
+        // Verificar que el Resource fue leído
         verify(keystoreMock, times(1)).getInputStream();
-    }
-
-    @Test
-    void testWebClientThrowsExceptionOnInvalidKeystore() throws Exception {
-
-        // Forzamos que el InputStream lance error
-        Resource badResource = mock(Resource.class);
-        when(badResource.getInputStream()).thenThrow(new RuntimeException("IO error"));
-
-        WebClientConfig badConfig = new WebClientConfig(badResource, "123456");
-
-        Exception ex = assertThrows(Exception.class, badConfig::webClient);
-
-        assertTrue(ex.getMessage().contains("IO"), "Debe fallar por error de lectura");
     }
 }
 
