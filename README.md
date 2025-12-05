@@ -76,7 +76,7 @@ if __name__ == "__main__":
 
 
 
-import json
+ import json
 import sys
 from pathlib import Path
 import os
@@ -211,28 +211,42 @@ def aplicar_caso(tabla: str, payload: dict, nombre_caso: str):
     return nuevo
 
 
-def cargar_evento(tabla=None, caso="DEFAULT"):
+def cargar_evento(tabla=None, caso=None):
 
-    if tabla:
-        print(f"✅ Generando evento MSK desde payload: {tabla}.json")
-
-        payload = cargar_payload(tabla)
-        payload = aplicar_caso(tabla, payload, caso)
-
-        archivo = generar_evento_msk(payload)
-
-    else:
+    # ✅ CASO DEFAULT → USAR evento_msk.json TAL CUAL
+    if not tabla:
         print("ℹ️ Usando evento MSK por defecto")
-        archivo = EVENTO_DEFAULT
+        with open(EVENTO_DEFAULT, encoding="utf-8") as f:
+            return json.load(f)
 
-    with open(archivo, encoding="utf-8") as f:
-        return json.load(f)
+    # ✅ CONSTRUIR PAYLOAD DINÁMICO
+    print(f"✅ Generando evento MSK desde payload: {tabla}.json")
+
+    payload = cargar_payload(tabla)
+
+    # ✅ APLICAR CASO SI EXISTE
+    if caso:
+        caso = caso.upper()
+        print(f"✅ Aplicando caso: {caso}")
+
+        cambios = CASOS_POR_TABLA.get(tabla, {}).get(caso)
+
+        if not cambios:
+            raise ValueError(f"❌ El caso '{caso}' no existe para la tabla {tabla}")
+
+        for campo, valor in cambios.items():
+            payload[campo]["string"] = valor
+
+    # ✅ GENERAR EVENTO MSK EN MEMORIA (SIN ARCHIVO)
+    evento = generar_evento_msk(payload)
+
+    return evento
 
 
 if __name__ == "__main__":
 
     tabla = sys.argv[1] if len(sys.argv) > 1 else None
-    caso = sys.argv[2] if len(sys.argv) > 2 else "DEFAULT"
+    caso  = sys.argv[2] if len(sys.argv) > 2 else None
 
     event = cargar_evento(tabla, caso)
 
@@ -242,6 +256,7 @@ if __name__ == "__main__":
 
     print("\n✅ RESPUESTA LAMBDA LOCAL:")
     print(response)
+
 
 # 🚀 Proyecto Pongámonos Serios -- Ejecución Local Profesional
 
