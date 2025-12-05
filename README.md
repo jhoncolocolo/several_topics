@@ -21,6 +21,61 @@ git push -f origin master
 
 
 ```text
+# src/utilitarios/evento_base.py
+import json
+import base64
+import sys
+from pathlib import Path
+
+
+BASE_DIR = Path(__file__).parent
+PAYLOADS_DIR = BASE_DIR / "payloads"
+EVENTO_MSK_BASE = BASE_DIR / "evento_msk.json"
+
+
+def cargar_payload(tabla: str):
+    archivo = PAYLOADS_DIR / f"{tabla}.json"
+
+    if not archivo.exists():
+        raise FileNotFoundError(f"❌ No existe el archivo de payload: {archivo}")
+
+    with open(archivo, encoding="utf-8") as f:
+        return json.load(f)
+
+
+def generar_evento_msk(payload: dict):
+    # ✅ Codificar payload a Base64
+    json_str = json.dumps(payload)
+    encoded = base64.b64encode(json_str.encode()).decode()
+
+    # ✅ Cargar plantilla base
+    with open(EVENTO_MSK_BASE, encoding="utf-8") as f:
+        evento = json.load(f)
+
+    # ✅ Inyectar el value nuevo EN MEMORIA
+    for _, records in evento["records"].items():
+        records[0]["value"] = encoded
+
+    # ✅ Retornar evento FINAL como dict (NO archivo)
+    return evento
+
+
+if __name__ == "__main__":
+
+    if len(sys.argv) > 1:
+        tabla = sys.argv[1]
+        print(f"✅ Usando payload dinámico: {tabla}.json")
+
+        payload = cargar_payload(tabla)
+        evento_final = generar_evento_msk(payload)
+
+        print("✅ Evento MSK generado EN MEMORIA:")
+        print(json.dumps(evento_final, indent=2))
+    else:
+        print("ℹ️ No se pasó tabla, se usará evento_msk.json original")
+
+
+
 import json
 import sys
 from pathlib import Path
