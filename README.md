@@ -45,3 +45,15 @@ Esta sección detalla el **cómo** y el **qué** se hizo, destacando el esfuerzo
 ## 📝 Conclusión para la Evaluación de Desempeño
 
 > "El objetivo se cumplió parcialmente en su meta formal (certificación), pero se **superó en la aplicación práctica y el impacto en el negocio**. El principal logro fue la **puesta en producción** de componentes críticos (*Lambdas* en Python) que iniciaron la estrategia de **desacoplamiento arquitectónico**, mejorando el rendimiento para el área objetivo y demostrando un conocimiento **aplicado y funcional** de los servicios cloud."
+
+AWS
+https://platzi.com/p/jecl6386/curso/3044-course/diploma/detalle/
+https://platzi.com/p/jecl6386/curso/3073-course/diploma/detalle/
+https://platzi.com/p/jecl6386/curso/8031-course/diploma/detalle/
+https://platzi.com/p/jecl6386/curso/2733-course/diploma/detalle/
+https://platzi.com/p/jecl6386/curso/2731-course/diploma/detalle/
+
+Python
+https://platzi.com/p/jecl6386/curso/5355-course/diploma/detalle/
+https://platzi.com/p/jecl6386/curso/5354-course/diploma/detalle/
+https://platzi.com/p/jecl6386/curso/2732-course/diploma/detalle/
