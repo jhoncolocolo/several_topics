@@ -460,3 +460,31 @@ Si quieres, en el siguiente mensaje puedo:
 
 Dime cómo quieres seguir y lo cerramos bien 💪
 ```
+
+```
+import org.springframework.web.util.UriComponentsBuilder;
+import java.net.URI;
+
+// ...
+
+public ResponseEntity<ValidarRespuesta> miMetodo(String param1, String param2, String param3) {
+    String myHOST = obtnerHOST(); // Asumo que esto devuelve algo como http://10.0.0.1:8080
+    
+    // 1. Construimos la URL de forma segura
+    // Esto separa la BASE de los PARÁMETROS, evitando que se inyecten maliciosamente
+    URI uri = UriComponentsBuilder.fromHttpUrl(myHOST)
+            .queryParam("p1", param1)
+            .queryParam("p2", param2)
+            .queryParam("p3", param3)
+            .build()
+            .encode() // Esto escapa caracteres especiales automáticamente
+            .toUri();
+
+    HttpHeaders headers = new HttpHeaders();
+    HttpEntity<String> entity = new HttpEntity<>(headers);
+
+    // 2. IMPORTANTE: Pasamos el objeto 'uri' (tipo URI), no un String.
+    // RestTemplate acepta objetos URI, y esto le dice a Veracode que la URL está saneada.
+    return this.restTemplate.postForEntity(uri, entity, ValidarRespuesta.class);
+}
+```
