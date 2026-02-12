@@ -311,4 +311,54 @@ output "dlq_queue_url" {
 output "lambda_function_name" {
   value = aws_lambda_function.main_lambda.function_name
 }
+
+
+
+
+##############################################################
+variable "aws_region" {
+  type    = string
+  default = "us-east-1"
+}
+
+variable "project_prefix" {
+  type    = string
+  default = "lambda-msk-sqs-demo"
+}
+
+variable "retry_max_receive_count" {
+  type    = number
+  default = 2
+}
+
+variable "retry_visibility_timeout_seconds" {
+  type    = number
+  default = 45
+}
+
+variable "lambda_timeout_seconds" {
+  type    = number
+  default = 30
+}
+
+variable "lambda_memory_mb" {
+  type    = number
+  default = 128
+}
+
+variable "batch_size" {
+  type    = number
+  default = 10
+}
+
+variable "sqs_url_endpoint" {
+  type    = string
+  default = ""
+}
+
+variable "EXTRA_ENV_VARS" {
+  type    = map(string)
+  default = {}
+}
+
 ```
