@@ -232,24 +232,20 @@ variable "EXTRA_ENV_VARS" {
   default = {}
 }
 
-lambda.py
-
-import json
+lambda_function.py
+ import json
 import boto3
 import os
-from datetime import datetime
+from datetime import datetime, UTC
 
 s3 = boto3.client("s3")
-BUCKET_NAME = os.environ["BUCKET_NAME"]
+BUCKET_NAME = os.environ.get("BUCKET_NAME", "test-bucket")
 
-def lambda_handler(event, context):
-    print("Evento recibido desde SQS DLQ:")
-    print(json.dumps(event))
-
+def process_records(records, s3_client):
     failed_items = []
     logs_to_store = []
 
-    for record in event.get("Records", []):
+    for record in records:
         try:
             message_id = record["messageId"]
             body = record["body"]
@@ -257,29 +253,113 @@ def lambda_handler(event, context):
             log_entry = f"MessageId: {message_id}\nBody: {body}\n---\n"
             logs_to_store.append(log_entry)
 
-            print(f"Procesado mensaje {message_id}")
-
-        except Exception as e:
-            print(f"Error procesando mensaje: {str(e)}")
+        except Exception:
             failed_items.append({
                 "itemIdentifier": record["messageId"]
             })
 
-    # Guardar en S3
+    return logs_to_store, failed_items
+
+
+def upload_to_s3(content, s3_client):
+    timestamp = datetime.now(UTC).strftime("%Y%m%d%H%M%S")
+    file_name = f"dlq_logs_{timestamp}.txt"
+
+    s3_client.put_object(
+        Bucket=BUCKET_NAME,
+        Key=file_name,
+        Body=content
+    )
+
+
+def lambda_handler(event, context):
+    print("Evento recibido:")
+    print(json.dumps(event))
+
+    records = event.get("Records", [])
+
+    logs_to_store, failed_items = process_records(records, s3)
+
     if logs_to_store:
-        timestamp = datetime.utcnow().strftime("%Y%m%d%H%M%S")
-        file_name = f"dlq_logs_{timestamp}.txt"
-
-        s3.put_object(
-            Bucket=BUCKET_NAME,
-            Key=file_name,
-            Body="".join(logs_to_store)
-        )
-
-        print(f"Archivo subido a S3: {file_name}")
+        try:
+            upload_to_s3("".join(logs_to_store), s3)
+        except Exception as e:
+            print("Error subiendo a S3:", str(e))
+            raise e  # 🔥 Esto es clave para que NO se borren los mensajes
 
     return {
         "batchItemFailures": failed_items
     }
+
+src/test
+
+import pytest
+from unittest.mock import Mock, patch
+from lambda_function import process_records,lambda_handler
+
+def test_all_success():
+    event = {
+        "Records": [
+            {"messageId": "1", "body": "ok"},
+            {"messageId": "2", "body": "ok"}
+        ]
+    }
+
+    mock_s3 = Mock()
+
+    with patch("lambda_function.s3", mock_s3):
+        response = lambda_handler(event, None)
+
+    assert response["batchItemFailures"] == []
+
+def test_partial_failure():
+    records = []
+
+    # 97 buenos
+    for i in range(97):
+        records.append({"messageId": str(i), "body": "ok"})
+
+    # 3 corruptos (sin body)
+    records.append({"messageId": "bad1"})
+    records.append({"messageId": "bad2"})
+    records.append({"messageId": "bad3"})
+
+    logs, failed = process_records(records, Mock())
+
+    assert len(failed) == 3
+    assert len(logs) == 97
+
+def test_s3_failure():
+    event = {
+        "Records": [
+            {"messageId": "1", "body": "ok"}
+        ]
+    }
+
+    mock_s3 = Mock()
+    mock_s3.put_object.side_effect = Exception("S3 failure")
+
+    with patch("lambda_function.s3", mock_s3):
+        with pytest.raises(Exception):
+            lambda_handler(event, None)
+
+def test_no_records():
+    event = {"Records": []}
+    response = lambda_handler(event, None)
+    assert response["batchItemFailures"] == []
+
+def test_all_failures():
+    records = [
+        {"messageId": "1"},
+        {"messageId": "2"}
+    ]
+
+    logs, failed = process_records(records, Mock())
+
+    assert len(logs) == 0
+    assert len(failed) == 2
+
+
+---
 
 ```
