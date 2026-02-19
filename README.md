@@ -363,3 +363,144 @@ def test_all_failures():
 ---
 
 ```
+
+```
+record_processor.py
+def process_records(records):
+    failed_items = []
+    logs_to_store = []
+
+    for record in records:
+        try:
+            message_id = record["messageId"]
+            body = record["body"]
+
+            log_entry = f"MessageId: {message_id}\nBody: {body}\n---\n"
+            logs_to_store.append(log_entry)
+
+        except Exception:
+            failed_items.append({
+                "itemIdentifier": record.get("messageId", "unknown")
+            })
+
+    return logs_to_store, failed_items
+
+✅ 2️⃣ s3_uploader.py
+from datetime import datetime, UTC
+import os
+
+BUCKET_NAME = os.environ.get("BUCKET_NAME", "test-bucket")
+
+def upload_to_s3(content, s3_client):
+    timestamp = datetime.now(UTC).strftime("%Y%m%d%H%M%S")
+    file_name = f"dlq_logs_{timestamp}.txt"
+
+    s3_client.put_object(
+        Bucket=BUCKET_NAME,
+        Key=file_name,
+        Body=content
+    )
+
+✅ 3️⃣ lambda_secundaria.py (nuevo handler)
+import json
+import boto3
+
+from record_processor import process_records
+from s3_uploader import upload_to_s3
+
+s3 = boto3.client("s3")
+
+def lambda_handler(event, context):
+    print("Evento recibido:")
+    print(json.dumps(event))
+
+    records = event.get("Records", [])
+
+    logs_to_store, failed_items = process_records(records)
+
+    if logs_to_store:
+        try:
+            upload_to_s3("".join(logs_to_store), s3)
+        except Exception as e:
+            print("Error subiendo a S3:", str(e))
+            raise e  # 🔥 mantiene mensajes en la cola
+
+    return {
+        "batchItemFailures": failed_items
+    }
+
+🧪 4️⃣ test_lambda_secundaria.py (adaptado)
+
+Ahora ajustamos imports para nueva estructura.
+
+import pytest
+from unittest.mock import Mock, patch
+
+from lambda_secundaria import lambda_handler
+from record_processor import process_records
+
+
+def test_all_success():
+    event = {
+        "Records": [
+            {"messageId": "1", "body": "ok"},
+            {"messageId": "2", "body": "ok"}
+        ]
+    }
+
+    mock_s3 = Mock()
+
+    with patch("lambda_secundaria.s3", mock_s3):
+        response = lambda_handler(event, None)
+
+    assert response["batchItemFailures"] == []
+
+
+def test_partial_failure():
+    records = []
+
+    for i in range(97):
+        records.append({"messageId": str(i), "body": "ok"})
+
+    records.append({"messageId": "bad1"})
+    records.append({"messageId": "bad2"})
+    records.append({"messageId": "bad3"})
+
+    logs, failed = process_records(records)
+
+    assert len(failed) == 3
+    assert len(logs) == 97
+
+
+def test_s3_failure():
+    event = {
+        "Records": [
+            {"messageId": "1", "body": "ok"}
+        ]
+    }
+
+    mock_s3 = Mock()
+    mock_s3.put_object.side_effect = Exception("S3 failure")
+
+    with patch("lambda_secundaria.s3", mock_s3):
+        with pytest.raises(Exception):
+            lambda_handler(event, None)
+
+
+def test_no_records():
+    event = {"Records": []}
+    response = lambda_handler(event, None)
+    assert response["batchItemFailures"] == []
+
+
+def test_all_failures():
+    records = [
+        {"messageId": "1"},
+        {"messageId": "2"}
+    ]
+
+    logs, failed = process_records(records)
+
+    assert len(logs) == 0
+    assert len(failed) == 2
+```
