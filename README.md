@@ -504,3 +504,252 @@ def test_all_failures():
     assert len(logs) == 0
     assert len(failed) == 2
 ```
+
+```
+# =========================================================
+# Archivo: src/services/procesador.py
+# =========================================================
+import os
+import json
+import base64
+import logging
+from services.openfga_sync_retry_hander import enviar_registro_a_reintento_o_dlq
+if os.getenv("TEST_MODE") != "SANDBOX": from services.servicio_redis import ServicioRedis
+from utilitarios.funcion_evento import obtener_evento_identificador, procesar_evento
+from services.excepciones import (
+    BadRequestError,
+    RedisError,
+    TransientError,
+    OpenFGAError
+)
+
+logger = logging.getLogger()
+logger.setLevel(logging.INFO)
+
+
+# =========================================================
+#   PUNTO DE ENTRADA
+# =========================================================
+def process_message(event):
+    print("Evento recibido:", event)
+
+    if es_evento_kafka(event):
+        return proceso_kafka_evento(event)
+
+    if es_evento_sqs(event):
+        return proceso_sqs_evento(event)
+
+    raise ValueError("Origen de evento no reconocido")
+
+
+def es_evento_kafka(event):
+    return event.get("eventSource") == "aws:kafka"
+
+
+def es_evento_sqs(event):
+    return "Records" in event and event["Records"][0].get("eventSource") == "aws:sqs"
+
+# =========================================================
+#   KAFKA (MSK)
+# =========================================================
+def proceso_kafka_evento(event):
+    batch_log = crear_batch_log("MSK")
+
+    for partition, rec_list in event.get("records", {}).items():
+        for idx, record in enumerate(rec_list):
+
+            payload = construir_evento_payload(record)
+            if payload is None:
+                continue
+
+            payload["messageId"] = f"{partition}:{idx}"
+            payload["retry"] = 0
+
+            process_with_log(payload, batch_log)
+
+    logger.info("MSK Batch Log: " + json.dumps(batch_log))
+    return batch_log
+
+
+# =========================================================
+#   SQS - RETORNA PARTIAL BATCH RESPONSE
+# =========================================================
+def proceso_sqs_evento(event):
+    sqs_records = event["Records"]
+    batch_log = crear_batch_log("SQS")
+    failed_items = []
+
+    for record in sqs_records:
+        body = json.loads(record["body"])
+        registro = body["openfgaOperations"][0]
+        registro["messageId"] = record["messageId"]
+        registro["retry"] = record["attributes"].get("ApproximateReceiveCount", "1")
+
+        try:
+            result = process(registro)
+
+            if result is None:
+                continue
+
+            batch_log["itemsProcesados"] += 1
+            batch_log["itemExitososBatch"].append({
+                "itemIdentificador": registro["messageId"],
+                "numeroReintento": registro["retry"]
+            })
+
+        except BadRequestError:
+            # ❗ BAD REQUEST → DLQ automático por SQS
+            batch_log["itemsFallidos"] += 1
+            batch_log["itemFallidosBatch"].append({
+                "itemIdentificador": registro["messageId"],
+                "numeroReintento": registro["retry"],
+                "error": "BadRequestError",
+                "destino": "DLQ"
+            })
+
+            # ❗ SQS enviará directo a DLQ → NO LLAMAR al handler
+            failed_items.append(registro["messageId"])
+
+        except (RedisError, OpenFGAError, TransientError) as e:
+            # ❗ Retry automático → SQS lo maneja
+            batch_log["itemsFallidos"] += 1
+            batch_log["itemFallidosBatch"].append({
+                "itemIdentificador": registro["messageId"],
+                "numeroReintento": registro["retry"],
+                "error": e.__class__.__name__,
+                "destino": "RETRY_AUTO_SQS"
+            })
+
+            # ❗ SQS hará el reintento → NO LLAMAR al handler
+            failed_items.append(registro["messageId"])
+
+    logger.info("SQS Batch Log: " + json.dumps(batch_log))
+
+    # SOLO SE DEBE RETORNAR batchItemFailures
+    if failed_items:
+        return {
+            "batchItemFailures": [
+                {"itemIdentifier": item} for item in failed_items
+            ]
+        }
+
+    # ÉXITO
+    return {}
+
+
+
+# =========================================================
+#   DECODE MSK
+# =========================================================
+def construir_evento_payload(record):
+    try:
+        decoded = base64.b64decode(record["value"]).decode("utf-8")
+        print("Evento DECODIFICAD0:", decoded)
+        return json.loads(decoded)
+    except Exception as e:
+        logger.error(f"Error decodificando payload MSK: {e}")
+        return None
+
+
+# =========================================================
+#   PROCESAMIENTO INDIVIDUAL
+# =========================================================
+def process_with_log(event, batch_log):
+    try:
+        result = process(event)
+
+        if result is None:
+            return
+
+        batch_log["itemsProcesados"] += 1
+        batch_log["itemExitososBatch"].append({
+            "itemIdentificador": event["messageId"],
+            "numeroReintento": event["retry"]
+        })
+
+    except BadRequestError:
+        batch_log["itemsFallidos"] += 1
+        batch_log["itemFallidosBatch"].append({
+            "itemIdentificador": event["messageId"],
+            "numeroReintento": event["retry"],
+            "error": "BadRequestError",
+            "destino": "DLQ"
+        })
+
+        enviar_registro_a_reintento_o_dlq(event, es_dlq=True)
+
+    except (RedisError, OpenFGAError, TransientError) as e:
+        batch_log["itemsFallidos"] += 1
+        batch_log["itemFallidosBatch"].append({
+            "itemIdentificador": event["messageId"],
+            "numeroReintento": event["retry"],
+            "error": e.__class__.__name__,
+            "destino": "RETRY"
+        })
+
+        enviar_registro_a_reintento_o_dlq(event, es_dlq=False)
+
+
+# =========================================================
+#   LÓGICA REAL
+# =========================================================
+def process(event):
+
+    # SANDBOX mock (por si aún quieres pruebas en consola)
+    if os.getenv("TEST_MODE") == "SANDBOX":
+        action = event.get("sandbox_action", "OK")
+        attempt = int(event.get("retry", 0))
+        print("action")
+        print(action)
+        print("attempt")
+        print(attempt)
+        # SIEMPRE FALLA → reintentos
+        if action == "ALWAYS_FAIL":
+            raise TransientError("mock failure")
+
+        # EXISTENTES
+        if action == "IDEMPOTENTE":
+            return None
+
+        if action == "RETRY":
+            if attempt >= 2:
+                return True
+            raise TransientError("retry simulated")
+
+        if action == "DLQ":
+            raise BadRequestError("dlq simulated")
+
+        if action == "REDIS":
+            raise RedisError("redis simulated")
+
+        if action == "OPENFGA":
+            raise OpenFGAError("openfga simulated")
+
+        return True
+
+    if os.getenv("TEST_MODE") != "SANDBOX": 
+        redis = ServicioRedis()
+        event_identifier = obtener_evento_identificador(event)
+
+        new_event = redis.guardar_evento(event, event_identifier["fuente"], event_identifier["tipo"])
+
+        if not new_event:
+            return None
+
+    procesar_evento(event, event_identifier["fuente"], event_identifier["tipo"])
+    return True
+
+
+# =========================================================
+#   UTILIDADES
+# =========================================================
+def crear_batch_log(origen):
+    return {
+        "origen": origen,
+        "itemsProcesados": 0,
+        "itemsFallidos": 0,
+        "itemExitososBatch": [],
+        "itemFallidosBatch": []
+    }
+
+```
